@@ -8,7 +8,8 @@ const PLUGIN_ID = 'nodebb-plugin-flowprompt-bot';
 // Env variables (configure in NodeBB environment)
 const { FLOWPROMPT_WEBHOOK_URL } = process.env;
 const { FLOWPROMPT_WEBHOOK_SECRET } = process.env;
-const { SUPPORT_CATEGORY_ID } = process.env;
+
+const SUPPORT_CATEGORY_ID = parseInt(process.env.SUPPORT_CATEGORY_ID, 10);
 
 console.log('FLOWPROMPT_WEBHOOK_URL', FLOWPROMPT_WEBHOOK_URL);
 console.log('FLOWPROMPT_WEBHOOK_SECRET', FLOWPROMPT_WEBHOOK_SECRET);

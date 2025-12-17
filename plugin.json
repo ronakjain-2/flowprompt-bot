@@ -5,6 +5,7 @@
   "url": "https://flowprompt.ai",
   "library": "./library.js",
   "hooks": [
+    { "hook": "static:app.load", "method": "init" },
     {
       "hook": "filter:topic.create",
       "method": "onTopicCreate",
@@ -12,12 +13,6 @@
     },
     { "hook": "filter:post.save", "method": "onPostSave", "priority": 10 }
   ],
-  "staticDirs": {},
-  "css": [],
-  "less": [],
-  "scripts": [],
-  "languages": [],
-  "acpScripts": [],
   "nbbpm": {
     "compatibility": "^4.0.0"
   }
