@@ -5,17 +5,18 @@ const crypto = require('crypto');
 
 const PLUGIN_ID = 'nodebb-plugin-flowprompt-bot';
 
-// Env variables (configure in NodeBB environment)
-const { FLOWPROMPT_WEBHOOK_URL } = process.env;
-const { FLOWPROMPT_WEBHOOK_SECRET } = process.env;
-
-const SUPPORT_CATEGORY_ID = parseInt(process.env.SUPPORT_CATEGORY_ID, 10);
+const SUPPORT_CATEGORY_ID = parseInt(
+  meta.config.flowprompt?.supportCategoryId,
+  10,
+);
+const FLOWPROMPT_WEBHOOK_URL = meta.config.flowprompt?.webhookUrl;
+const FLOWPROMPT_WEBHOOK_SECRET = meta.config.flowprompt?.webhookSecret;
 
 console.log('FLOWPROMPT_WEBHOOK_URL', FLOWPROMPT_WEBHOOK_URL);
 console.log('FLOWPROMPT_WEBHOOK_SECRET', FLOWPROMPT_WEBHOOK_SECRET);
 console.log('SUPPORT_CATEGORY_ID', SUPPORT_CATEGORY_ID);
 
-const BOT_UID = parseInt(process.env.BOT_UID || '0', 10);
+const BOT_UID = parseInt(meta.config.flowprompt?.botUid || '0', 10);
 
 function signPayload(payload, timestamp) {
   const body = JSON.stringify(payload);
