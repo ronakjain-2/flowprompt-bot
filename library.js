@@ -20,6 +20,10 @@ function getConfig() {
   };
 }
 
+const flowpromptConfig = getConfig();
+
+console.log('flowpromptConfig', flowpromptConfig);
+
 function signPayload(payload, timestamp, secret) {
   const body = JSON.stringify(payload);
   const base = `${timestamp}.${body}`;
