@@ -3,26 +3,28 @@ const winston = require.main.require('winston');
 const axios = require('axios');
 const crypto = require('crypto');
 
+const Meta = require.main.require('./src/meta');
+
 const PLUGIN_ID = 'nodebb-plugin-flowprompt-bot';
 
-const SUPPORT_CATEGORY_ID = parseInt(
-  meta.config.flowprompt?.supportCategoryId,
-  10,
-);
-const FLOWPROMPT_WEBHOOK_URL = meta.config.flowprompt?.webhookUrl;
-const FLOWPROMPT_WEBHOOK_SECRET = meta.config.flowprompt?.webhookSecret;
+// Lazy config getters - access config when needed
+function getConfig() {
+  const config = Meta.config || {};
+  const flowpromptConfig = config.flowprompt || {};
 
-console.log('FLOWPROMPT_WEBHOOK_URL', FLOWPROMPT_WEBHOOK_URL);
-console.log('FLOWPROMPT_WEBHOOK_SECRET', FLOWPROMPT_WEBHOOK_SECRET);
-console.log('SUPPORT_CATEGORY_ID', SUPPORT_CATEGORY_ID);
+  return {
+    supportCategoryId: parseInt(flowpromptConfig.supportCategoryId || '0', 10),
+    webhookUrl: flowpromptConfig.webhookUrl || '',
+    webhookSecret: flowpromptConfig.webhookSecret || '',
+    botUid: parseInt(flowpromptConfig.botUid || '0', 10),
+  };
+}
 
-const BOT_UID = parseInt(meta.config.flowprompt?.botUid || '0', 10);
-
-function signPayload(payload, timestamp) {
+function signPayload(payload, timestamp, secret) {
   const body = JSON.stringify(payload);
   const base = `${timestamp}.${body}`;
   const hmac = crypto
-    .createHmac('sha256', FLOWPROMPT_WEBHOOK_SECRET || '')
+    .createHmac('sha256', secret || '')
     .update(base)
     .digest('hex');
 
@@ -30,16 +32,20 @@ function signPayload(payload, timestamp) {
 }
 
 async function sendToFlowPrompt(eventType, payload) {
-  if (!FLOWPROMPT_WEBHOOK_URL || !FLOWPROMPT_WEBHOOK_SECRET) {
+  const config = getConfig();
+
+  console.log('config', config);
+
+  if (!config.webhookUrl || !config.webhookSecret) {
     winston.warn(`[${PLUGIN_ID}] Webhook not configured. Skipping event.`);
     return;
   }
 
   try {
     const timestamp = Date.now().toString();
-    const signature = signPayload(payload, timestamp);
+    const signature = signPayload(payload, timestamp, config.webhookSecret);
 
-    await axios.post(FLOWPROMPT_WEBHOOK_URL, payload, {
+    await axios.post(config.webhookUrl, payload, {
       headers: {
         'Content-Type': 'application/json',
         'x-flowprompt-signature': signature,
@@ -66,13 +72,15 @@ async function sendToFlowPrompt(eventType, payload) {
  * - Skip bot user
  * - Skip edits/deleted
  */
-function shouldProcess({ cid, uid, isMain, isDeleted }) {
-  if (!SUPPORT_CATEGORY_ID || cid !== SUPPORT_CATEGORY_ID) {
+function shouldProcess({ cid, uid, isDeleted }) {
+  const config = getConfig();
+
+  if (!config.supportCategoryId || cid !== config.supportCategoryId) {
     return false;
   }
 
   // Skip posts authored by the bot
-  if (BOT_UID && uid === BOT_UID) {
+  if (config.botUid && uid === config.botUid) {
     return false;
   }
 
