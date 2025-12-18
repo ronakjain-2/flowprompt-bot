@@ -186,6 +186,16 @@ Plugin.onTopicCreate = async function (hookData) {
       baseUrl: nconf.get('url'),
     };
 
+    // Log when a new support topic is being sent to FlowPrompt backend
+    winston.info(`[${PLUGIN_ID}] Preparing to send topic.create webhook`, {
+      tid: payload.tid,
+      pid: payload.pid,
+      cid: payload.cid,
+      uid: payload.uid,
+      username: payload.username,
+      title: payload.title,
+    });
+
     await sendToFlowPrompt('topic.create', payload);
 
     return hookData;
