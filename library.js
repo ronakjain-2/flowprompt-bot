@@ -156,6 +156,7 @@ Plugin.init = async function () {
  */
 Plugin.onTopicCreate = async function (hookData) {
   try {
+    winston.info(`[${PLUGIN_ID}] onTopicCreate webhook`, hookData);
     const topic = hookData.topic || {};
     const post = hookData.post || {};
 
