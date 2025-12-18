@@ -12,14 +12,13 @@ let cachedConfig = null;
 
 // Lazy config getters - access config when needed
 function getConfig() {
-  // If cached from init, use that
+  // If cached from init (preferred), use that
   if (cachedConfig) {
     return cachedConfig;
   }
 
-  // Fallback: try Meta.config (might not have plugin settings)
-  const config = Meta.config || {};
-  const flowpromptConfig = config.flowprompt || {};
+  // Fallback: read from NodeBB config.json → "flowprompt" block
+  const flowpromptConfig = nconf.get('flowprompt') || {};
 
   return {
     supportCategoryId: parseInt(flowpromptConfig.supportCategoryId || '0', 10),
@@ -110,22 +109,31 @@ Plugin.init = async function () {
   try {
     winston.info(`[${PLUGIN_ID}] Initializing plugin...`);
 
-    // Load plugin settings from NodeBB
+    // 1) Load plugin settings from ACP (if any)
     const settings = await Meta.settings.get('flowprompt-bot');
 
+    // 2) Load static config from NodeBB config.json ("flowprompt" block)
+    const fileConfig = nconf.get('flowprompt') || {};
+
+    // Merge: ACP settings override config.json
     cachedConfig = {
-      supportCategoryId: parseInt(settings.supportCategoryId || '0', 10),
-      webhookUrl: settings.webhookUrl || '',
-      webhookSecret: settings.webhookSecret || '',
-      botUid: parseInt(settings.botUid || '0', 10),
+      supportCategoryId: parseInt(
+        settings.supportCategoryId || fileConfig.supportCategoryId || '0',
+        10,
+      ),
+      webhookUrl: settings.webhookUrl || fileConfig.webhookUrl || '',
+      webhookSecret: settings.webhookSecret || fileConfig.webhookSecret || '',
+      botUid: parseInt(settings.botUid || fileConfig.botUid || '0', 10),
     };
 
-    winston.info(`[${PLUGIN_ID}] Plugin initialized with config:`, {
-      supportCategoryId: cachedConfig.supportCategoryId,
-      webhookUrl: cachedConfig.webhookUrl ? 'configured' : 'missing',
-      webhookSecret: cachedConfig.webhookSecret ? 'configured' : 'missing',
-      botUid: cachedConfig.botUid || 'not set',
-    });
+    winston.info(
+      `[${PLUGIN_ID}] Plugin initialized with config: ${JSON.stringify({
+        supportCategoryId: cachedConfig.supportCategoryId,
+        webhookUrl: cachedConfig.webhookUrl ? 'configured' : 'missing',
+        webhookSecret: cachedConfig.webhookSecret ? 'configured' : 'missing',
+        botUid: cachedConfig.botUid || 'not set',
+      })}`,
+    );
 
     if (!cachedConfig.webhookUrl || !cachedConfig.webhookSecret) {
       winston.warn(
