@@ -7,8 +7,17 @@ const Meta = require.main.require('./src/meta');
 
 const PLUGIN_ID = 'nodebb-plugin-flowprompt-bot';
 
+// Cache config after init
+let cachedConfig = null;
+
 // Lazy config getters - access config when needed
 function getConfig() {
+  // If cached from init, use that
+  if (cachedConfig) {
+    return cachedConfig;
+  }
+
+  // Fallback: try Meta.config (might not have plugin settings)
   const config = Meta.config || {};
   const flowpromptConfig = config.flowprompt || {};
 
@@ -19,10 +28,6 @@ function getConfig() {
     botUid: parseInt(flowpromptConfig.botUid || '0', 10),
   };
 }
-
-const flowpromptConfig = getConfig();
-
-console.log('flowpromptConfig', flowpromptConfig);
 
 function signPayload(payload, timestamp, secret) {
   const body = JSON.stringify(payload);
@@ -37,8 +42,6 @@ function signPayload(payload, timestamp, secret) {
 
 async function sendToFlowPrompt(eventType, payload) {
   const config = getConfig();
-
-  console.log('config', config);
 
   if (!config.webhookUrl || !config.webhookSecret) {
     winston.warn(`[${PLUGIN_ID}] Webhook not configured. Skipping event.`);
@@ -98,6 +101,41 @@ function shouldProcess({ cid, uid, isDeleted }) {
 }
 
 const Plugin = {};
+
+/**
+ * Hook: static:app.load
+ * Initialize plugin and load settings
+ */
+Plugin.init = async function () {
+  try {
+    winston.info(`[${PLUGIN_ID}] Initializing plugin...`);
+
+    // Load plugin settings from NodeBB
+    const settings = await Meta.settings.get('flowprompt-bot');
+
+    cachedConfig = {
+      supportCategoryId: parseInt(settings.supportCategoryId || '0', 10),
+      webhookUrl: settings.webhookUrl || '',
+      webhookSecret: settings.webhookSecret || '',
+      botUid: parseInt(settings.botUid || '0', 10),
+    };
+
+    winston.info(`[${PLUGIN_ID}] Plugin initialized with config:`, {
+      supportCategoryId: cachedConfig.supportCategoryId,
+      webhookUrl: cachedConfig.webhookUrl ? 'configured' : 'missing',
+      webhookSecret: cachedConfig.webhookSecret ? 'configured' : 'missing',
+      botUid: cachedConfig.botUid || 'not set',
+    });
+
+    if (!cachedConfig.webhookUrl || !cachedConfig.webhookSecret) {
+      winston.warn(
+        `[${PLUGIN_ID}] Webhook URL or Secret not configured. Plugin will not send events.`,
+      );
+    }
+  } catch (err) {
+    winston.error(`[${PLUGIN_ID}] Init error: ${err.message}`, err);
+  }
+};
 
 /**
  * Hook: filter:topic.create
