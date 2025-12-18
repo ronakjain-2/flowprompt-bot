@@ -129,8 +129,8 @@ Plugin.init = async function () {
     winston.info(
       `[${PLUGIN_ID}] Plugin initialized with config: ${JSON.stringify({
         supportCategoryId: cachedConfig.supportCategoryId,
-        webhookUrl: cachedConfig.webhookUrl ? 'configured' : 'missing',
-        webhookSecret: cachedConfig.webhookSecret ? 'configured' : 'missing',
+        webhookUrl: cachedConfig.webhookUrl,
+        webhookSecret: cachedConfig.webhookSecret,
         botUid: cachedConfig.botUid || 'not set',
       })}`,
     );
