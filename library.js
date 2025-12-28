@@ -6,7 +6,7 @@ const nconf = require.main.require('nconf');
 
 const fpConfig = nconf.get('flowprompt') || {};
 
-const SUPPORT_CATEGORY_ID = parseInt(fpConfig.supportCategoryId || '0', 10);
+const SUPPORT_CATEGORY_ID = Number(fpConfig.supportCategoryId);
 const WEBHOOK_URL = fpConfig.webhookUrl;
 const WEBHOOK_SECRET = fpConfig.webhookSecret;
 
@@ -71,31 +71,33 @@ Plugin.onTopicCreate = async function (hookData) {
   try {
     const { topic, post } = hookData;
 
-    winston.info('[FlowPromptBot] Topic CID received:', topic?.cid);
+    const topicCid = Number(topic?.cid);
+    const expectedCid = Number(SUPPORT_CATEGORY_ID);
+
+    winston.info(`[FlowPromptBot] Topic CID normalized: ${topicCid}`);
     winston.info(
-      '[FlowPromptBot] Expected SUPPORT_CATEGORY_ID:',
-      SUPPORT_CATEGORY_ID,
+      `[FlowPromptBot] Expected SUPPORT_CATEGORY_ID: ${expectedCid}`,
     );
 
-    if (!topic) {
-      winston.warn('[FlowPromptBot] topic missing in hookData');
+    if (!topic || Number.isNaN(topicCid)) {
+      winston.warn('[FlowPromptBot] Invalid topic or cid');
       return hookData;
     }
 
-    if (topic.cid !== SUPPORT_CATEGORY_ID) {
+    if (topicCid !== expectedCid) {
       winston.warn(
-        `[FlowPromptBot] Category mismatch. Got ${topic.cid}, expected ${SUPPORT_CATEGORY_ID}`,
+        `[FlowPromptBot] Category mismatch. Got ${topicCid}, expected ${expectedCid}`,
       );
       return hookData;
     }
 
-    winston.info('[FlowPromptBot] Category matched, preparing payload');
+    winston.info('[FlowPromptBot] Category matched ✅');
 
     const payload = {
       event: 'topic.create',
       tid: topic.tid,
       pid: post?.pid,
-      cid: topic.cid,
+      cid: topicCid,
       uid: topic.uid,
       username: topic.user?.username || 'unknown',
       title: topic.title,
@@ -103,11 +105,11 @@ Plugin.onTopicCreate = async function (hookData) {
       timestamp: Date.now(),
     };
 
-    winston.info('[FlowPromptBot] Payload ready, sending webhook');
+    winston.info('[FlowPromptBot] Sending webhook');
 
     await sendToFlowPrompt('topic.create', payload);
 
-    winston.info('[FlowPromptBot] Webhook function completed');
+    winston.info('[FlowPromptBot] Webhook flow completed');
   } catch (err) {
     winston.error('[FlowPromptBot] onTopicCreate error', err);
   }
