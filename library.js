@@ -3,6 +3,7 @@ const winston = require.main.require('winston');
 const axios = require('axios');
 const crypto = require('crypto');
 const https = require('https');
+const tls = require('tls');
 
 const Meta = require.main.require('./src/meta');
 
@@ -67,71 +68,36 @@ async function sendToFlowPrompt(eventType, payload) {
       `[${PLUGIN_ID}] Making HTTPS request to ${hostname}:${targetPort}${pathname}`,
     );
 
-    // Serialize payload
-    const body = JSON.stringify(payload);
-    const bodyBuffer = Buffer.from(body, 'utf8');
+    // Create a custom HTTPS agent that properly sets SNI
+    // Override createConnection to ensure servername is set in TLS handshake
+    class SNIAgent extends https.Agent {
+      createConnection(options) {
+        // Create the TLS socket with explicit SNI configuration
+        return tls.connect({
+          host: options.host || options.hostname || hostname,
+          port: options.port || targetPort,
+          servername: hostname, // CRITICAL: This sets SNI in the TLS handshake
+          rejectUnauthorized: true,
+          minVersion: 'TLSv1.2',
+        });
+      }
+    }
 
-    // Create HTTPS request options
-    // servername must be set in request options for SNI to work properly
-    const requestOptions = {
-      hostname,
-      port: targetPort,
-      path: pathname,
-      method: 'POST',
+    const httpsAgent = new SNIAgent({
+      keepAlive: false,
+    });
+
+    // Use axios with custom SNI-aware agent
+    await axios.post(config.webhookUrl, payload, {
       headers: {
         'Content-Type': 'application/json',
-        'Content-Length': bodyBuffer.length,
         'x-flowprompt-signature': signature,
         'x-flowprompt-timestamp': timestamp,
         'x-flowprompt-event-type': eventType,
-        'User-Agent': 'nodebb-plugin-flowprompt-bot',
       },
-      // CRITICAL: servername sets SNI in TLS handshake
-      // This must match the hostname the server expects
-      servername: hostname,
-      rejectUnauthorized: true,
-      // Ensure TLS 1.2 or higher is used
-      minVersion: 'TLSv1.2',
-    };
-
-    // Make the request using native https module with custom agent for SNI control
-    await new Promise((resolve, reject) => {
-      const req = https.request(requestOptions, (res) => {
-        let responseData = '';
-
-        res.on('data', (chunk) => {
-          responseData += chunk;
-        });
-
-        res.on('end', () => {
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            winston.info(
-              `[${PLUGIN_ID}] Sent event ${eventType} for tid=${payload.tid}, pid=${payload.pid || 'topic'}`,
-            );
-            resolve(responseData);
-          } else {
-            reject(
-              new Error(
-                `HTTP ${res.statusCode}: ${responseData.substring(0, 100)}`,
-              ),
-            );
-          }
-        });
-      });
-
-      // Set timeout on the request object (5 seconds)
-      req.setTimeout(5000, () => {
-        req.destroy();
-        reject(new Error('Request timeout'));
-      });
-
-      req.on('error', (err) => {
-        reject(err);
-      });
-
-      // Write the request body
-      req.write(bodyBuffer);
-      req.end();
+      timeout: 5000,
+      httpsAgent,
+      maxRedirects: 0,
     });
   } catch (err) {
     winston.error(
