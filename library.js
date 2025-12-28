@@ -43,7 +43,7 @@ async function sendToFlowPrompt(eventType, payload) {
     await axios.post(WEBHOOK_URL, payload, {
       headers: {
         'Content-Type': 'application/json',
-        'x-flowprompt-event': eventType,
+        'x-flowprompt-event-type': eventType,
         'x-flowprompt-timestamp': timestamp,
         'x-flowprompt-signature': signature,
       },
@@ -105,6 +105,7 @@ Plugin.onTopicCreate = async function (hookData) {
       title: topic.title,
       content: post?.content || '',
       timestamp: Date.now(),
+      baseUrl: nconf.get('url') || '',
     };
 
     winston.info('[FlowPromptBot] Sending webhook');
