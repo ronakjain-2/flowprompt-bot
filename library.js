@@ -42,6 +42,10 @@ function signPayload(payload, timestamp, secret) {
 async function sendToFlowPrompt(eventType, payload) {
   const config = getConfig();
 
+  winston.warn(
+    `[${PLUGIN_ID}] Sending to FlowPrompt: ${eventType} with payload: ${JSON.stringify(payload)}`,
+  );
+
   if (!config.webhookUrl || !config.webhookSecret) {
     winston.warn(`[${PLUGIN_ID}] Webhook not configured. Skipping event.`);
     return;
@@ -156,12 +160,19 @@ Plugin.init = async function () {
  */
 Plugin.onTopicCreate = async function (hookData) {
   try {
-    winston.info(`[${PLUGIN_ID}] onTopicCreate webhook`, hookData);
+    // NodeBB hook structure: hookData.data (post data) and hookData.topic (topic data)
     const topic = hookData.topic || {};
-    const post = hookData.post || {};
+    const postData = hookData.data || hookData.post || {};
 
-    const { cid } = topic;
-    const uid = post.uid || topic.uid;
+    const cid = parseInt(topic.cid || postData.cid || '0', 10);
+    const uid = parseInt(postData.uid || topic.uid || '0', 10);
+
+    winston.info(`[${PLUGIN_ID}] onTopicCreate hook called`, {
+      tid: topic.tid,
+      cid,
+      uid,
+      title: topic.title || postData.title,
+    });
 
     if (
       !shouldProcess({
@@ -171,18 +182,27 @@ Plugin.onTopicCreate = async function (hookData) {
         isDeleted: !!topic.deleted,
       })
     ) {
+      winston.info(`[${PLUGIN_ID}] Topic filtered out by shouldProcess`, {
+        tid: topic.tid,
+        cid,
+        uid,
+      });
       return hookData;
     }
 
     const payload = {
       event: 'topic.create',
       tid: topic.tid,
-      pid: post.pid || topic.mainPid,
-      cid: topic.cid,
+      pid: postData.pid || topic.mainPid || 0,
+      cid,
       uid,
-      username: post.username || topic.user?.username,
-      title: topic.title,
-      content: post.content,
+      username:
+        postData.handle ||
+        postData.username ||
+        topic.user?.username ||
+        'unknown',
+      title: topic.title || postData.title,
+      content: postData.content || '',
       timestamp: Date.now(),
       baseUrl: nconf.get('url'),
     };
