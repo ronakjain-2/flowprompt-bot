@@ -2,6 +2,7 @@ const nconf = require.main.require('nconf');
 const winston = require.main.require('winston');
 const axios = require('axios');
 const crypto = require('crypto');
+const https = require('https');
 
 const Meta = require.main.require('./src/meta');
 
@@ -55,6 +56,16 @@ async function sendToFlowPrompt(eventType, payload) {
     const timestamp = Date.now().toString();
     const signature = signPayload(payload, timestamp, config.webhookSecret);
 
+    // Parse URL to get hostname for SNI
+    const webhookUrl = new URL(config.webhookUrl);
+    const { hostname } = webhookUrl;
+
+    // Create HTTPS agent with proper SNI configuration
+    const httpsAgent = new https.Agent({
+      servername: hostname,
+      rejectUnauthorized: true,
+    });
+
     await axios.post(config.webhookUrl, payload, {
       headers: {
         'Content-Type': 'application/json',
@@ -63,6 +74,7 @@ async function sendToFlowPrompt(eventType, payload) {
         'x-flowprompt-event-type': eventType,
       },
       timeout: 5000,
+      httpsAgent,
     });
 
     winston.info(
