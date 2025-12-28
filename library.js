@@ -2,29 +2,20 @@ const nconf = require.main.require('nconf');
 const winston = require.main.require('winston');
 const axios = require('axios');
 const crypto = require('crypto');
-const https = require('https');
-
-const Meta = require.main.require('./src/meta');
 
 const PLUGIN_ID = 'nodebb-plugin-flowprompt-bot';
 
 // =========================
-// Cached Config
+// Config (via config.json)
 // =========================
-let cachedConfig = null;
-
 function getConfig() {
-  if (cachedConfig) {
-    return cachedConfig;
-  }
-
-  const flowpromptConfig = nconf.get('flowprompt') || {};
+  const cfg = nconf.get('flowprompt') || {};
 
   return {
-    supportCategoryId: parseInt(flowpromptConfig.supportCategoryId || '0', 10),
-    webhookUrl: flowpromptConfig.webhookUrl || '',
-    webhookSecret: flowpromptConfig.webhookSecret || '',
-    botUid: parseInt(flowpromptConfig.botUid || '0', 10),
+    supportCategoryId: parseInt(cfg.supportCategoryId || '0', 10),
+    webhookUrl: cfg.webhookUrl || '',
+    webhookSecret: cfg.webhookSecret || '',
+    botUid: parseInt(cfg.botUid || '0', 10),
   };
 }
 
@@ -33,11 +24,10 @@ function getConfig() {
 // =========================
 function signPayload(payload, timestamp, secret) {
   const body = JSON.stringify(payload);
-  const base = `${timestamp}.${body}`;
 
   return `sha256=${crypto
     .createHmac('sha256', secret)
-    .update(base)
+    .update(`${timestamp}.${body}`)
     .digest('hex')}`;
 }
 
@@ -58,13 +48,7 @@ async function sendToFlowPrompt(eventType, payload) {
 
     winston.info(`[${PLUGIN_ID}] Sending ${eventType} → ${config.webhookUrl}`);
 
-    // ✅ NORMAL HTTPS AGENT — LET NODE HANDLE SNI
-    const httpsAgent = new https.Agent({
-      keepAlive: false,
-      rejectUnauthorized: true,
-      minVersion: 'TLSv1.2',
-    });
-
+    // ✅ DO NOT pass httpsAgent
     await axios.post(config.webhookUrl, payload, {
       headers: {
         'Content-Type': 'application/json',
@@ -73,8 +57,7 @@ async function sendToFlowPrompt(eventType, payload) {
         'x-flowprompt-signature': signature,
       },
       timeout: 5000,
-      httpsAgent,
-      validateStatus: (status) => status < 500, // don’t crash NodeBB
+      validateStatus: (status) => status < 500, // don't crash NodeBB
     });
 
     winston.info(`[${PLUGIN_ID}] Webhook sent successfully`);
@@ -89,17 +72,11 @@ async function sendToFlowPrompt(eventType, payload) {
 function shouldProcess({ cid, uid, isDeleted }) {
   const config = getConfig();
 
-  if (!config.supportCategoryId || cid !== config.supportCategoryId) {
-    return false;
-  }
+  if (cid !== config.supportCategoryId) return false;
 
-  if (config.botUid && uid === config.botUid) {
-    return false;
-  }
+  if (config.botUid && uid === config.botUid) return false;
 
-  if (isDeleted) {
-    return false;
-  }
+  if (isDeleted) return false;
 
   return true;
 }
@@ -109,50 +86,15 @@ function shouldProcess({ cid, uid, isDeleted }) {
 // =========================
 const Plugin = {};
 
-Plugin.init = async function () {
-  try {
-    winston.info(`[${PLUGIN_ID}] Initializing...`);
-
-    const settings = await Meta.settings.get('flowprompt-bot');
-    const fileConfig = nconf.get('flowprompt') || {};
-
-    cachedConfig = {
-      supportCategoryId: parseInt(
-        settings.supportCategoryId || fileConfig.supportCategoryId || '0',
-        10,
-      ),
-      webhookUrl: settings.webhookUrl || fileConfig.webhookUrl || '',
-      webhookSecret: settings.webhookSecret || fileConfig.webhookSecret || '',
-      botUid: parseInt(settings.botUid || fileConfig.botUid || '0', 10),
-    };
-
-    winston.info(
-      `[${PLUGIN_ID}] Loaded config: ${JSON.stringify({
-        supportCategoryId: cachedConfig.supportCategoryId,
-        webhookUrl: cachedConfig.webhookUrl,
-        botUid: cachedConfig.botUid || 'not set',
-      })}`,
-    );
-  } catch (err) {
-    winston.error(`[${PLUGIN_ID}] Init failed`, err);
-  }
-};
-
 Plugin.onTopicCreate = async function (hookData) {
   try {
     const topic = hookData.topic || {};
-    const post = hookData.data || hookData.post || {};
+    const post = hookData.post || {};
 
-    const cid = parseInt(topic.cid || post.cid || '0', 10);
+    const cid = parseInt(topic.cid || '0', 10);
     const uid = parseInt(post.uid || topic.uid || '0', 10);
 
-    if (
-      !shouldProcess({
-        cid,
-        uid,
-        isDeleted: !!topic.deleted,
-      })
-    ) {
+    if (!shouldProcess({ cid, uid, isDeleted: !!topic.deleted })) {
       return hookData;
     }
 
