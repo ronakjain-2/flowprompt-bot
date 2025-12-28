@@ -4,18 +4,16 @@ const crypto = require('crypto');
 const winston = require.main.require('winston');
 const nconf = require.main.require('nconf');
 
-console.log('[FlowPromptBot] Plugin loaded');
+const fpConfig = nconf.get('flowprompt') || {};
 
-// =========================
-// Config
-// =========================
-const SUPPORT_CATEGORY_ID = 6;
+const SUPPORT_CATEGORY_ID = parseInt(fpConfig.supportCategoryId || '0', 10);
+const WEBHOOK_URL = fpConfig.webhookUrl;
+const WEBHOOK_SECRET = fpConfig.webhookSecret;
 
-const WEBHOOK_URL = process.env.FLOWPROMPT_WEBHOOK_URL;
-const WEBHOOK_SECRET = process.env.FLOWPROMPT_WEBHOOK_SECRET;
+winston.info('[FlowPromptBot] Plugin loaded');
 
 if (!WEBHOOK_URL || !WEBHOOK_SECRET) {
-  winston.warn('[FlowPromptBot] Webhook env vars missing');
+  winston.warn('[FlowPromptBot] Webhook config missing');
 }
 
 // =========================
