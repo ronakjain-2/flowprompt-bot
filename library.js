@@ -1,122 +1,101 @@
-const nconf = require.main.require('nconf');
-const winston = require.main.require('winston');
 const axios = require('axios');
 const crypto = require('crypto');
+const https = require('https');
 
-const PLUGIN_ID = 'nodebb-plugin-flowprompt-bot';
+const winston = require.main.require('winston');
 
-// =========================
-// Config (via config.json)
-// =========================
-function getConfig() {
-  const cfg = nconf.get('flowprompt') || {};
+const FLOWPROMPT_URL = process.env.FLOWPROMPT_WEBHOOK_URL;
+const { FLOWPROMPT_SECRET } = process.env;
 
-  return {
-    supportCategoryId: parseInt(cfg.supportCategoryId || '0', 10),
-    webhookUrl: cfg.webhookUrl || '',
-    webhookSecret: cfg.webhookSecret || '',
-    botUid: parseInt(cfg.botUid || '0', 10),
-  };
+/**
+ * 🔐 HTTPS Agent with proper TLS + SNI
+ */
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  minVersion: 'TLSv1.2',
+  servername: 'api.flowprompt.com', // 🔥 THIS FIXES THE ERROR
+  rejectUnauthorized: true,
+});
+
+/**
+ * 🔐 Sign payload
+ */
+function generateSignature(payload, timestamp) {
+  return crypto
+    .createHmac('sha256', FLOWPROMPT_SECRET)
+    .update(`${timestamp}.${JSON.stringify(payload)}`)
+    .digest('hex');
 }
 
-// =========================
-// Security
-// =========================
-function signPayload(payload, timestamp, secret) {
-  const body = JSON.stringify(payload);
-
-  return `sha256=${crypto
-    .createHmac('sha256', secret)
-    .update(`${timestamp}.${body}`)
-    .digest('hex')}`;
-}
-
-// =========================
-// Webhook Sender (FIXED)
-// =========================
+/**
+ * 🚀 Send event to FlowPrompt
+ */
 async function sendToFlowPrompt(eventType, payload) {
-  const config = getConfig();
-
-  if (!config.webhookUrl || !config.webhookSecret) {
-    winston.warn(`[${PLUGIN_ID}] Webhook not configured. Skipping.`);
+  if (!FLOWPROMPT_URL || !FLOWPROMPT_SECRET) {
+    winston.error('[nodebb-plugin-flowprompt-bot] Missing FlowPrompt env vars');
     return;
   }
 
+  const timestamp = Date.now();
+  const signature = generateSignature(payload, timestamp);
+
   try {
-    const timestamp = Date.now().toString();
-    const signature = signPayload(payload, timestamp, config.webhookSecret);
+    winston.info(
+      `[nodebb-plugin-flowprompt-bot] Sending ${eventType} → ${FLOWPROMPT_URL}`,
+    );
 
-    winston.info(`[${PLUGIN_ID}] Sending ${eventType} → ${config.webhookUrl}`);
-
-    // ✅ DO NOT pass httpsAgent
-    await axios.post(config.webhookUrl, payload, {
+    await axios.post(FLOWPROMPT_URL, payload, {
+      timeout: 5000,
+      httpsAgent, // ✅ FIX APPLIED HERE
       headers: {
         'Content-Type': 'application/json',
         'x-flowprompt-event-type': eventType,
         'x-flowprompt-timestamp': timestamp,
-        'x-flowprompt-signature': signature,
+        'x-flowprompt-signature': `sha256=${signature}`,
       },
-      timeout: 5000,
-      validateStatus: (status) => status < 500, // don't crash NodeBB
     });
 
-    winston.info(`[${PLUGIN_ID}] Webhook sent successfully`);
+    winston.info('[nodebb-plugin-flowprompt-bot] Event delivered successfully');
   } catch (err) {
-    winston.error(`[${PLUGIN_ID}] Webhook failed: ${err.message}`, err);
+    winston.error('[nodebb-plugin-flowprompt-bot] FlowPrompt API error', {
+      message: err.message,
+      code: err.code,
+    });
   }
 }
 
-// =========================
-// Guards
-// =========================
-function shouldProcess({ cid, uid, isDeleted }) {
-  const config = getConfig();
-
-  if (cid !== config.supportCategoryId) return false;
-
-  if (config.botUid && uid === config.botUid) return false;
-
-  if (isDeleted) return false;
-
-  return true;
-}
-
-// =========================
-// Plugin Hooks
-// =========================
-const Plugin = {};
-
-Plugin.onTopicCreate = async function (hookData) {
+/**
+ * 🎯 Hook: topic.create
+ */
+async function onTopicCreate(hookData) {
   try {
-    const topic = hookData.topic || {};
-    const post = hookData.post || {};
+    const { topic, post } = hookData;
 
-    const cid = parseInt(topic.cid || '0', 10);
-    const uid = parseInt(post.uid || topic.uid || '0', 10);
-
-    if (!shouldProcess({ cid, uid, isDeleted: !!topic.deleted })) {
+    if (!topic || topic.cid !== 6) {
       return hookData;
     }
 
     const payload = {
       event: 'topic.create',
       tid: topic.tid,
-      pid: post.pid || topic.mainPid || 0,
-      cid,
-      uid,
-      username: post.username || topic.user?.username || 'unknown',
-      title: topic.title || '',
+      pid: post.pid,
+      cid: topic.cid,
+      uid: topic.uid,
+      username: topic.user?.username || 'unknown',
+      title: topic.title,
       content: post.content || '',
       timestamp: Date.now(),
-      baseUrl: nconf.get('url'),
+      baseUrl: process.env.NODEBB_URL,
     };
 
     await sendToFlowPrompt('topic.create', payload);
-    return hookData;
   } catch (err) {
-    winston.error(`[${PLUGIN_ID}] onTopicCreate error`, err);
-    return hookData;
+    winston.error('[nodebb-plugin-flowprompt-bot] Hook error', err);
   }
-};
 
-module.exports = Plugin;
+  return hookData;
+}
+
+module.exports = {
+  onTopicCreate,
+};
