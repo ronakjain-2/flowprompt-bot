@@ -56,30 +56,75 @@ async function sendToFlowPrompt(eventType, payload) {
     const timestamp = Date.now().toString();
     const signature = signPayload(payload, timestamp, config.webhookSecret);
 
-    // Parse URL to get hostname for SNI
+    winston.info(`[${PLUGIN_ID}] Signature: ${signature}`);
+
+    // Parse URL to get components
     const webhookUrl = new URL(config.webhookUrl);
-    const { hostname } = webhookUrl;
+    const { hostname, port, pathname } = webhookUrl;
+    const targetPort = port || 443;
 
-    // Create HTTPS agent with proper SNI configuration
-    const httpsAgent = new https.Agent({
-      servername: hostname,
-      rejectUnauthorized: true,
-    });
+    // Serialize payload
+    const body = JSON.stringify(payload);
+    const bodyBuffer = Buffer.from(body, 'utf8');
 
-    await axios.post(config.webhookUrl, payload, {
+    // Create HTTPS request with proper SNI configuration
+    const requestOptions = {
+      hostname,
+      port: targetPort,
+      path: pathname,
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Content-Length': bodyBuffer.length,
         'x-flowprompt-signature': signature,
         'x-flowprompt-timestamp': timestamp,
         'x-flowprompt-event-type': eventType,
+        'User-Agent': 'nodebb-plugin-flowprompt-bot',
       },
-      timeout: 5000,
-      httpsAgent,
-    });
+      // SNI is set via servername option - this is critical for the TLS handshake
+      servername: hostname,
+      rejectUnauthorized: true,
+    };
 
-    winston.info(
-      `[${PLUGIN_ID}] Sent event ${eventType} for tid=${payload.tid}, pid=${payload.pid || 'topic'}`,
-    );
+    // Make the request using native https module for full control over TLS/SNI
+    await new Promise((resolve, reject) => {
+      const req = https.request(requestOptions, (res) => {
+        let responseData = '';
+
+        res.on('data', (chunk) => {
+          responseData += chunk;
+        });
+
+        res.on('end', () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            winston.info(
+              `[${PLUGIN_ID}] Sent event ${eventType} for tid=${payload.tid}, pid=${payload.pid || 'topic'}`,
+            );
+            resolve(responseData);
+          } else {
+            reject(
+              new Error(
+                `HTTP ${res.statusCode}: ${responseData.substring(0, 100)}`,
+              ),
+            );
+          }
+        });
+      });
+
+      // Set timeout on the request object (5 seconds)
+      req.setTimeout(5000, () => {
+        req.destroy();
+        reject(new Error('Request timeout'));
+      });
+
+      req.on('error', (err) => {
+        reject(err);
+      });
+
+      // Write the request body
+      req.write(bodyBuffer);
+      req.end();
+    });
   } catch (err) {
     winston.error(
       `[${PLUGIN_ID}] Failed to send event ${eventType}: ${err.message}`,
