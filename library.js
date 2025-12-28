@@ -35,7 +35,9 @@ async function sendToFlowPrompt(eventType, payload) {
   const timestamp = Date.now().toString();
   const signature = signPayload(payload, timestamp);
 
-  winston.info(`[FlowPromptBot] Sending ${eventType} to FlowPrompt`);
+  winston.info(
+    `[FlowPromptBot] Sending ${eventType} to FlowPrompt WEBHOOK_URL ${WEBHOOK_URL}`,
+  );
 
   try {
     await axios.post(WEBHOOK_URL, payload, {
