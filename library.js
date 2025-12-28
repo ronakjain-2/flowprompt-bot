@@ -63,11 +63,16 @@ async function sendToFlowPrompt(eventType, payload) {
     const { hostname, port, pathname } = webhookUrl;
     const targetPort = port || 443;
 
+    winston.info(
+      `[${PLUGIN_ID}] Making HTTPS request to ${hostname}:${targetPort}${pathname}`,
+    );
+
     // Serialize payload
     const body = JSON.stringify(payload);
     const bodyBuffer = Buffer.from(body, 'utf8');
 
-    // Create HTTPS request with proper SNI configuration
+    // Create HTTPS request options
+    // servername must be set in request options for SNI to work properly
     const requestOptions = {
       hostname,
       port: targetPort,
@@ -81,12 +86,15 @@ async function sendToFlowPrompt(eventType, payload) {
         'x-flowprompt-event-type': eventType,
         'User-Agent': 'nodebb-plugin-flowprompt-bot',
       },
-      // SNI is set via servername option - this is critical for the TLS handshake
+      // CRITICAL: servername sets SNI in TLS handshake
+      // This must match the hostname the server expects
       servername: hostname,
       rejectUnauthorized: true,
+      // Ensure TLS 1.2 or higher is used
+      minVersion: 'TLSv1.2',
     };
 
-    // Make the request using native https module for full control over TLS/SNI
+    // Make the request using native https module with custom agent for SNI control
     await new Promise((resolve, reject) => {
       const req = https.request(requestOptions, (res) => {
         let responseData = '';
