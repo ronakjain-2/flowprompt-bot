@@ -71,9 +71,25 @@ Plugin.onTopicCreate = async function (hookData) {
   try {
     const { topic, post } = hookData;
 
-    if (!topic || topic.cid !== SUPPORT_CATEGORY_ID) {
+    winston.info('[FlowPromptBot] Topic CID received:', topic?.cid);
+    winston.info(
+      '[FlowPromptBot] Expected SUPPORT_CATEGORY_ID:',
+      SUPPORT_CATEGORY_ID,
+    );
+
+    if (!topic) {
+      winston.warn('[FlowPromptBot] topic missing in hookData');
       return hookData;
     }
+
+    if (topic.cid !== SUPPORT_CATEGORY_ID) {
+      winston.warn(
+        `[FlowPromptBot] Category mismatch. Got ${topic.cid}, expected ${SUPPORT_CATEGORY_ID}`,
+      );
+      return hookData;
+    }
+
+    winston.info('[FlowPromptBot] Category matched, preparing payload');
 
     const payload = {
       event: 'topic.create',
@@ -85,10 +101,13 @@ Plugin.onTopicCreate = async function (hookData) {
       title: topic.title,
       content: post?.content || '',
       timestamp: Date.now(),
-      baseUrl: nconf.get('url'),
     };
 
+    winston.info('[FlowPromptBot] Payload ready, sending webhook');
+
     await sendToFlowPrompt('topic.create', payload);
+
+    winston.info('[FlowPromptBot] Webhook function completed');
   } catch (err) {
     winston.error('[FlowPromptBot] onTopicCreate error', err);
   }
