@@ -22,11 +22,11 @@
   });
 
   /**
-   * Watch DOM for category changes (NodeBB-crash safe)
+   * Wait until category dropdown exists (NodeBB v4)
    */
   function waitForCategoryDropdown() {
     const interval = setInterval(() => {
-      const $select = $('.composer select[name="cid"]');
+      const $select = $('select[data-action="category"]');
 
       if (!$select.length) return;
 
@@ -34,7 +34,7 @@
 
       console.log('[FlowPromptBot] Category dropdown detected');
 
-      $select.on('change', function () {
+      $select.off('change.flowprompt').on('change.flowprompt', function () {
         const cid = $(this).val();
 
         console.log('[FlowPromptBot] Category changed to', cid);
