@@ -1,27 +1,18 @@
 {
   "id": "nodebb-plugin-flowprompt-bot",
   "name": "FlowPrompt Support Bot",
-  "description": "Adds optional Flow selector to topic composer and sends events to FlowPrompt",
+  "description": "Attach optional Flow selection to support topics and send events to FlowPrompt",
   "url": "https://flowprompt.ai",
   "library": "./library.js",
-
   "hooks": [
-    {
-      "hook": "filter:composer.build",
-      "method": "extendComposer"
-    },
-    {
-      "hook": "filter:topic.create",
-      "method": "onTopicCreate"
-    }
+    { "hook": "filter:topic.create", "method": "onTopicCreate" },
+    { "hook": "filter:composer.build", "method": "filterComposerBuild" },
+    { "hook": "filter:config.get", "method": "filterConfigGet" }
   ],
-
-  "scripts": ["public/client.js"],
-
   "staticDirs": {
     "public": "./public"
   },
-
+  "scripts": ["public/client.js"],
   "nbbpm": {
     "compatibility": "^4.0.0"
   }

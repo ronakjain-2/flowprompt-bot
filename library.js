@@ -1,87 +1,111 @@
-const nconf = require.main.require('nconf');
-const winston = require.main.require('winston');
 const axios = require('axios');
 
-const Topics = require.main.require('./src/topics');
+const nconf = require.main.require('nconf');
+const winston = require.main.require('winston');
+const crypto = require('crypto');
 
 const PLUGIN_ID = 'nodebb-plugin-flowprompt-bot';
 
-// Read config from NodeBB config.json
-const fpConfig = nconf.get('flowprompt') || {};
-
-const SUPPORT_CATEGORY_ID = Number(fpConfig.supportCategoryId);
-const WEBHOOK_URL = fpConfig.webhookUrl;
-const WEBHOOK_SECRET = fpConfig.webhookSecret;
+const SUPPORT_CATEGORY_ID = Number(process.env.SUPPORT_CATEGORY_ID);
+const { FLOWPROMPT_WEBHOOK_URL } = process.env;
+const { FLOWPROMPT_WEBHOOK_SECRET } = process.env;
 
 const Plugin = {};
 
-/**
- * Inject data into composer (SERVER → CLIENT)
- * This is REQUIRED for NodeBB v4
- */
-Plugin.extendComposer = async function (data) {
-  data.templateData = data.templateData || {};
+/* --------------------------------------------------
+ * Expose config to client
+ * -------------------------------------------------- */
+Plugin.filterConfigGet = async function (config) {
+  config.flowpromptSupportCategoryId = SUPPORT_CATEGORY_ID;
+  return config;
+};
 
-  data.templateData.flowpromptBot = {
-    enabled: true,
-    supportCategoryId: SUPPORT_CATEGORY_ID,
-  };
-
-  winston.info('[FlowPromptBot] Composer extended');
+Plugin.filterComposerBuild = async function (data) {
+  data.templateData.flowpromptSupportCategoryId = SUPPORT_CATEGORY_ID;
   return data;
 };
 
-/**
+/* --------------------------------------------------
+ * API: fetch flows for logged-in user
+ * -------------------------------------------------- */
+Plugin.init = async function (params) {
+  const { router, middleware } = params;
+
+  router.get(
+    '/api/plugins/nodebb-plugin-flowprompt-bot/flows',
+    middleware.authenticate,
+    async (req, res) => {
+      try {
+        // 🔁 Replace this with real API call
+        const flows = [
+          { id: 'flow-1', name: 'Support Automation' },
+          { id: 'flow-2', name: 'Billing Assistant' },
+        ];
+
+        res.json({ success: true, data: flows });
+      } catch (err) {
+        winston.error('[FlowPromptBot] Flow API error', err);
+        res.status(500).json({ success: false });
+      }
+    },
+  );
+
+  winston.info('[FlowPromptBot] Plugin loaded');
+};
+
+/* --------------------------------------------------
+ * Webhook signing
+ * -------------------------------------------------- */
+function signPayload(payload, timestamp) {
+  const base = `${timestamp}.${JSON.stringify(payload)}`;
+
+  return `sha256=${crypto
+    .createHmac('sha256', FLOWPROMPT_WEBHOOK_SECRET)
+    .update(base)
+    .digest('hex')}`;
+}
+
+/* --------------------------------------------------
  * Topic create hook
- * Captures optional flowId and persists it
- */
+ * -------------------------------------------------- */
 Plugin.onTopicCreate = async function (hookData) {
   try {
-    winston.info('[FlowPromptBot] onTopicCreate triggered');
-
     const { topic } = hookData;
-    const cid = Number(topic?.cid);
+    const { post } = hookData;
 
-    if (cid !== SUPPORT_CATEGORY_ID) {
-      return hookData;
-    }
+    const cid = Number(topic.cid);
 
-    // Read flowId safely (multiple fallbacks)
-    const flowId =
-      hookData?.req?.body?.flowId ||
-      hookData?.data?.flowId ||
-      hookData?.post?.flowId ||
-      null;
+    if (cid !== SUPPORT_CATEGORY_ID) return hookData;
 
-    winston.info('[FlowPromptBot] flowId received:', flowId);
+    const payload = {
+      event: 'topic.create',
+      tid: topic.tid,
+      cid,
+      uid: topic.uid,
+      title: topic.title,
+      content: post.content,
+      flowId: hookData.data?.flowId || null,
+      baseUrl: nconf.get('url'),
+      timestamp: Date.now(),
+    };
 
-    // OPTIONAL behavior — only persist if present
-    if (flowId) {
-      await Topics.setTopicField(topic.tid, 'flowId', flowId);
-      winston.info(
-        `[FlowPromptBot] Linked topic ${topic.tid} to flow ${flowId}`,
-      );
-    }
+    const timestamp = Date.now().toString();
 
-    // Fire webhook (non-blocking)
-    if (WEBHOOK_URL && WEBHOOK_SECRET) {
-      axios
-        .post(WEBHOOK_URL, {
-          event: 'topic.create',
-          tid: topic.tid,
-          cid,
-          flowId,
-          title: topic.title,
-        })
-        .catch((err) => {
-          winston.error('[FlowPromptBot] Webhook error', err.message);
-        });
-    }
+    await axios.post(FLOWPROMPT_WEBHOOK_URL, payload, {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-flowprompt-timestamp': timestamp,
+        'x-flowprompt-signature': signPayload(payload, timestamp),
+      },
+      timeout: 5000,
+    });
+
+    winston.info('[FlowPromptBot] Webhook sent');
+    return hookData;
   } catch (err) {
-    winston.error('[FlowPromptBot] onTopicCreate failed', err);
+    winston.error('[FlowPromptBot] Webhook failed', err);
+    return hookData;
   }
-
-  return hookData;
 };
 
 module.exports = Plugin;
