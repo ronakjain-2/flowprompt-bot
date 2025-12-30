@@ -1,12 +1,7 @@
 {
   "id": "nodebb-plugin-flowprompt-bot",
-  "name": "FlowPrompt Support Bot",
-  "description": "Post-topic Flow selection modal",
+  "name": "FlowPrompt Debug Plugin",
   "library": "./library.js",
-  "hooks": [{ "hook": "filter:config.get", "method": "exposeConfig" }],
-  "staticDirs": {
-    "public": "./public"
-  },
   "scripts": ["public/client.js"],
   "nbbpm": {
     "compatibility": "^4.0.0"
