@@ -1,8 +1,11 @@
 {
   "id": "nodebb-plugin-flowprompt-bot",
-  "name": "FlowPrompt Debug Plugin",
+  "name": "FlowPrompt Support Bot",
+  "description": "Flow selector + bot integration",
+  "url": "https://flowprompt.ai",
   "library": "./library.js",
-  "scripts": ["public/client.js"],
+  "hooks": [{ "hook": "static:app.load", "method": "init" }],
+  "scripts": ["static/client.js"],
   "nbbpm": {
     "compatibility": "^4.0.0"
   }

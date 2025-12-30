@@ -1,31 +1,30 @@
+const winston = require.main.require('winston');
 const axios = require('axios');
 
-const routeHelpers = require.main.require('./src/routes/helpers');
-const db = require.main.require('./src/database');
-const meta = require.main.require('./src/meta');
-const winston = require.main.require('./src/logger');
+const PLUGIN_ID = 'nodebb-plugin-flowprompt-bot';
 
-const plugin = {};
+const { FLOWPROMPT_API_URL } = process.env;
+const { FLOWPROMPT_API_KEY } = process.env;
 
-plugin.init = async function (params) {
-  const { router, middleware } = params;
+const Plugin = {};
 
-  winston.info('[FlowPromptBot] Plugin loaded');
+Plugin.init = async ({ router, middleware }) => {
+  winston.info(
+    '[FlowPromptBot] Plugin loaded',
+    FLOWPROMPT_API_URL,
+    FLOWPROMPT_API_KEY,
+  );
 
   /**
-   * GET /api/plugins/nodebb-plugin-flowprompt-bot/flows
-   * Returns flows created by the logged-in user
+   * GET flows for logged-in user
+   * URL: /api/plugins/nodebb-plugin-flowprompt-bot/flows
    */
-  routeHelpers.setupApiRoute(
-    router,
-    'get',
-    '/flows',
-    [middleware.ensureLoggedIn],
+  router.get(
+    `/api/plugins/${PLUGIN_ID}/flows`,
+    middleware.ensureLoggedIn,
     async (req, res) => {
       try {
-        const { uid } = req;
-
-        winston.info(`[FlowPromptBot] Fetching flows for uid ${uid}`);
+        winston.info('[FlowPromptBot] /flows API called');
 
         res.json({
           success: true,
@@ -34,57 +33,59 @@ plugin.init = async function (params) {
             { id: 'flow-2', name: 'Billing Assistant' },
           ],
         });
-
-        // 🔁 CALL YOUR EXTERNAL API HERE
-        // const response = await axios.get(
-        //   `${process.env.FLOWPROMPT_API_URL}/api/internal/flows`,
-        //   {
-        //     headers: {
-        //       Authorization: `Bearer ${process.env.FLOWPROMPT_API_KEY}`,
-        //     },
-        //     timeout: 5000,
+        // const response = await axios.get(`${FLOWPROMPT_API_URL}/flows`, {
+        //   headers: {
+        //     Authorization: `Bearer ${FLOWPROMPT_API_KEY}`,
+        //     'x-user-id': req.user.uid,
         //   },
-        // );
+        //   timeout: 5000,
+        // });
 
         // res.json({
-        //   flows: response.data.flows || [],
+        //   success: true,
+        //   flows: response.data || [],
         // });
       } catch (err) {
-        winston.error('[FlowPromptBot] Failed to fetch flows', err);
-        res.status(500).json({ error: 'Failed to fetch flows' });
+        winston.error('[FlowPromptBot] Failed to fetch flows', err.message);
+        res.status(500).json({
+          success: false,
+          message: 'Failed to fetch flows',
+        });
       }
     },
   );
 
   /**
-   * POST /api/plugins/nodebb-plugin-flowprompt-bot/link
-   * Links a flow to a topic
+   * POST link flow to topic
    */
-  routeHelpers.setupApiRoute(
-    router,
-    'post',
-    '/link',
-    [middleware.ensureLoggedIn],
+  router.post(
+    `/api/plugins/${PLUGIN_ID}/link`,
+    middleware.ensureLoggedIn,
     async (req, res) => {
+      const { tid, flowId } = req.body;
+
+      if (!flowId) {
+        return res.json({ success: true });
+      }
+
       try {
-        const { tid, flowId } = req.body;
-        const { uid } = req;
-
-        if (!tid || !flowId) {
-          return res.status(400).json({ error: 'Missing tid or flowId' });
-        }
-
-        winston.info(`[FlowPromptBot] Linking flow ${flowId} to topic ${tid}`);
-
-        await db.setObjectField(`topic:${tid}:flowprompt`, 'flowId', flowId);
+        await axios.post(
+          `${FLOWPROMPT_API_URL}/link-topic`,
+          { tid, flowId },
+          {
+            headers: {
+              Authorization: `Bearer ${FLOWPROMPT_API_KEY}`,
+            },
+          },
+        );
 
         res.json({ success: true });
       } catch (err) {
-        winston.error('[FlowPromptBot] Failed to link flow', err);
-        res.status(500).json({ error: 'Failed to link flow' });
+        winston.error('[FlowPromptBot] Failed to link flow', err.message);
+        res.status(500).json({ success: false });
       }
     },
   );
 };
 
-module.exports = plugin;
+module.exports = Plugin;
