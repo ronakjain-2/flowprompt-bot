@@ -4,7 +4,6 @@
   "description": "Flow selector + bot integration",
   "url": "https://flowprompt.ai",
   "library": "./library.js",
-  "hooks": [{ "hook": "static:app.load", "method": "init" }],
   "scripts": ["public/client.js"],
   "nbbpm": {
     "compatibility": "^4.0.0"
