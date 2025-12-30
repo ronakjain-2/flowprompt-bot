@@ -1,77 +1,65 @@
-define('flowprompt-composer', ['composer'], (composer) => {
+(function () {
   const PLUGIN_ID = 'nodebb-plugin-flowprompt-bot';
 
-  composer.addComposerControl({
-    id: 'flowprompt-flow',
-    label: 'Select Flow (Optional)',
-    icon: 'fa-project-diagram',
-    position: 'left',
+  // Fires every time composer is opened
+  $(window).on('action:composer.loaded', async (ev, data) => {
+    try {
+      const composer = data?.composer;
 
-    async action(composerInstance) {
-      const templateData = composerInstance?.templateData?.flowpromptBot;
+      if (!composer || !composer.container) {
+        return;
+      }
+
+      const templateData = composer?.templateData?.flowpromptBot;
 
       if (!templateData?.enabled) {
         return;
       }
 
-      const cid = composerInstance.category?.cid;
+      const cid = Number(composer.category?.cid);
 
-      if (Number(cid) !== Number(templateData.supportCategoryId)) {
+      if (cid !== Number(templateData.supportCategoryId)) {
         return;
       }
 
-      // Prevent duplicate UI
-      if (composerInstance.container.querySelector('#flowprompt-flow-select')) {
+      // Prevent duplicate dropdown
+      if (composer.container.find('#flowprompt-flow-select').length) {
         return;
       }
 
-      const wrapper = document.createElement('div');
+      const $wrapper = $(`
+        <div class="form-group flowprompt-flow-wrapper">
+          <label>Select Flow (Optional)</label>
+          <select id="flowprompt-flow-select" class="form-control">
+            <option value="">No Flow (Optional)</option>
+          </select>
+        </div>
+      `);
 
-      wrapper.className = 'form-group';
-      wrapper.style.marginBottom = '10px';
+      // Insert above textarea
+      composer.container.find('.composer-body').prepend($wrapper);
 
-      const label = document.createElement('label');
+      // Load flows
+      const res = await fetch(`/api/plugins/${PLUGIN_ID}/flows`, {
+        credentials: 'include',
+      });
 
-      label.textContent = 'Select Flow (Optional)';
+      const result = await res.json();
 
-      const select = document.createElement('select');
-
-      select.id = 'flowprompt-flow-select';
-      select.className = 'form-control';
-
-      select.innerHTML = `<option value="">No Flow (Optional)</option>`;
-
-      wrapper.appendChild(label);
-      wrapper.appendChild(select);
-
-      composerInstance.container
-        .querySelector('.composer-body')
-        .prepend(wrapper);
-
-      try {
-        const res = await fetch(`/api/plugins/${PLUGIN_ID}/flows`, {
-          credentials: 'include',
+      if (result?.success && Array.isArray(result.data)) {
+        result.data.forEach((flow) => {
+          $('#flowprompt-flow-select').append(
+            `<option value="${flow.id}">${flow.name}</option>`,
+          );
         });
-
-        const result = await res.json();
-
-        if (result?.success && Array.isArray(result.data)) {
-          result.data.forEach((flow) => {
-            const opt = document.createElement('option');
-
-            opt.value = flow.id;
-            opt.textContent = flow.name;
-            select.appendChild(opt);
-          });
-        }
-      } catch (err) {
-        console.error('[FlowPromptBot] Failed to load flows', err);
       }
 
       // Persist selection into composer payload
-      select.addEventListener('change', () => {
-        composerInstance.setData('flowId', select.value || null);
+      $('#flowprompt-flow-select').on('change', function () {
+        composer.setData('flowId', this.value || null);
       });
-    },
+    } catch (err) {
+      console.error('[FlowPromptBot] Composer injection failed', err);
+    }
   });
-});
+})();
