@@ -6,21 +6,39 @@
 
   let selectedFlowId = null;
   let modalOpened = false;
-  let poller = null;
 
   console.log('[FlowPromptBot] client.js LOADED');
 
-  // Fired when composer opens
+  /**
+   * Composer opened
+   */
   $(window).on('action:composer.loaded', () => {
     console.log('[FlowPromptBot] composer.loaded fired');
-
     modalOpened = false;
     selectedFlowId = null;
-
-    startCategoryWatcher();
   });
 
-  // After topic creation → link flow
+  /**
+   * 🔥 Fires when category dropdown changes (NodeBB v4)
+   */
+  $(window).on('action:composer.categoryChanged', (ev, data) => {
+    const cid = parseInt(data?.cid, 10);
+
+    console.log('[FlowPromptBot] categoryChanged event', cid);
+
+    if (modalOpened) return;
+
+    if (cid !== SUPPORT_CATEGORY_ID) return;
+
+    console.log('[FlowPromptBot] Support category detected');
+    modalOpened = true;
+
+    openFlowModal();
+  });
+
+  /**
+   * After topic creation → link flow
+   */
   $(window).on('action:ajaxify.end', async (ev, data) => {
     if (!data?.tid || !selectedFlowId) return;
 
@@ -38,29 +56,6 @@
     selectedFlowId = null;
   });
 
-  /**
-   * Poll composer category (NodeBB v4 safe)
-   */
-  function startCategoryWatcher() {
-    if (poller) clearInterval(poller);
-
-    poller = setInterval(() => {
-      const composer = app?.composer;
-      const cid = parseInt(composer?.cid, 10);
-
-      if (!cid || modalOpened) return;
-
-      if (cid === SUPPORT_CATEGORY_ID) {
-        console.log('[FlowPromptBot] Support category detected');
-
-        modalOpened = true;
-        clearInterval(poller);
-
-        openFlowModal();
-      }
-    }, 300);
-  }
-
   async function openFlowModal() {
     console.log('[FlowPromptBot] Opening Flow modal');
 
@@ -72,7 +67,6 @@
       const res = await $.get(`/api/plugins/${PLUGIN_ID}/flows`);
 
       flows = res.flows || [];
-
       console.log('[FlowPromptBot] Flows loaded:', flows.length);
     } catch (err) {
       console.error('[FlowPromptBot] Failed to fetch flows', err);
