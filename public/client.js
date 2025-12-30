@@ -1,59 +1,47 @@
 (function () {
-  const PLUGIN_ID = 'nodebb-plugin-flowprompt-bot';
-  let injected = false;
+  const API_URL = '/api/plugins/nodebb-plugin-flowprompt-bot/flows';
 
-  async function injectDropdown(composer) {
-    if (!composer || !composer.container || injected) return;
+  async function loadFlows() {
+    const res = await fetch(API_URL, { credentials: 'include' });
+    const json = await res.json();
 
-    const cid = Number(composer.category?.cid);
+    return json?.data || [];
+  }
+
+  $(window).on('action:composer.rendered', async (e, data) => {
+    const { composer } = data;
+
+    if (!composer) return;
+
     const supportCid = Number(window.flowpromptSupportCategoryId);
+    const currentCid = Number(composer.category?.cid);
 
-    if (!cid || cid !== supportCid) return;
+    const wrapper = $('.flowprompt-flow-wrapper');
 
-    if (composer.container.find('#flowprompt-flow-select').length) {
-      injected = true;
+    if (!wrapper.length) return;
+
+    if (currentCid !== supportCid) {
+      wrapper.addClass('d-none');
       return;
     }
 
-    const $el = $(`
-      <div class="form-group">
-        <label>Flow (Optional)</label>
-        <select id="flowprompt-flow-select" class="form-control">
-          <option value="">No Flow</option>
-        </select>
-      </div>
-    `);
+    wrapper.removeClass('d-none');
 
-    composer.container.find('.composer-body').prepend($el);
+    const select = $('#flowprompt-flow-select');
 
-    const res = await fetch(`/api/plugins/${PLUGIN_ID}/flows`, {
-      credentials: 'include',
+    if (select.data('loaded')) return;
+
+    const flows = await loadFlows();
+
+    flows.forEach((flow) => {
+      select.append(`<option value="${flow.id}">${flow.name}</option>`);
     });
 
-    const json = await res.json();
-
-    if (json?.success && Array.isArray(json.data)) {
-      json.data.forEach((flow) => {
-        $('#flowprompt-flow-select').append(
-          `<option value="${flow.id}">${flow.name}</option>`,
-        );
-      });
-    }
-
-    $('#flowprompt-flow-select').on('change', function () {
+    select.on('change', function () {
       composer.setData('flowId', this.value || null);
     });
 
-    injected = true;
+    select.data('loaded', true);
     console.log('[FlowPromptBot] Flow dropdown ready');
-  }
-
-  $(window).on('action:composer.loaded', (e, data) => {
-    injected = false;
-    injectDropdown(data.composer);
-  });
-
-  $(window).on('action:composer.categorySelected', (e, data) => {
-    injectDropdown(data.composer);
   });
 })();
