@@ -9,15 +9,10 @@ const { FLOWPROMPT_API_KEY } = process.env;
 const Plugin = {};
 
 Plugin.init = async ({ router, middleware }) => {
-  winston.info(
-    '[FlowPromptBot] Plugin loaded',
-    FLOWPROMPT_API_URL,
-    FLOWPROMPT_API_KEY,
-  );
+  winston.info('[FlowPromptBot] Plugin loaded');
 
   /**
-   * GET flows for logged-in user
-   * URL: /api/plugins/nodebb-plugin-flowprompt-bot/flows
+   * GET user flows
    */
   router.get(
     `/api/plugins/${PLUGIN_ID}/flows`,
@@ -26,30 +21,23 @@ Plugin.init = async ({ router, middleware }) => {
       try {
         winston.info('[FlowPromptBot] /flows API called');
 
+        const response = await axios.get(`${FLOWPROMPT_API_URL}/flows`, {
+          headers: {
+            Authorization: `Bearer ${FLOWPROMPT_API_KEY}`,
+            'x-user-id': req.user.uid,
+          },
+          timeout: 5000,
+        });
+
         res.json({
           success: true,
-          data: [
-            { id: 'flow-1', name: 'Support Automation' },
-            { id: 'flow-2', name: 'Billing Assistant' },
-          ],
+          flows: response.data || [],
         });
-        // const response = await axios.get(`${FLOWPROMPT_API_URL}/flows`, {
-        //   headers: {
-        //     Authorization: `Bearer ${FLOWPROMPT_API_KEY}`,
-        //     'x-user-id': req.user.uid,
-        //   },
-        //   timeout: 5000,
-        // });
-
-        // res.json({
-        //   success: true,
-        //   flows: response.data || [],
-        // });
       } catch (err) {
         winston.error('[FlowPromptBot] Failed to fetch flows', err.message);
         res.status(500).json({
           success: false,
-          message: 'Failed to fetch flows',
+          flows: [],
         });
       }
     },

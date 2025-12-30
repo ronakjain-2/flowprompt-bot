@@ -5,23 +5,38 @@
   const SUPPORT_CATEGORY_ID = 6;
 
   let selectedFlowId = null;
+  let modalOpened = false;
 
   console.log('[FlowPromptBot] client.js LOADED');
 
   $(window).on('action:composer.loaded', () => {
     console.log('[FlowPromptBot] composer.loaded fired');
+    modalOpened = false;
+    selectedFlowId = null;
   });
 
-  $(window).on('action:composer.categorySelected', (ev, data) => {
-    if (parseInt(data.cid, 10) !== SUPPORT_CATEGORY_ID) return;
+  /**
+   * Detect support category on submit
+   * (NodeBB v4 safe)
+   */
+  $(window).on('action:composer.submit', () => {
+    const composer = app?.composer;
 
+    if (!composer || modalOpened) return;
+
+    const cid = parseInt(composer.cid, 10);
+
+    if (cid !== SUPPORT_CATEGORY_ID) return;
+
+    console.log('[FlowPromptBot] Support category detected');
+
+    modalOpened = true;
     openFlowModal();
   });
 
-  $(window).on('action:composer.submit', () => {
-    console.log('[FlowPromptBot] composer.submit detected');
-  });
-
+  /**
+   * After topic is created → link flow
+   */
   $(window).on('action:ajaxify.end', async (ev, data) => {
     if (!data?.tid || !selectedFlowId) return;
 
@@ -50,21 +65,21 @@
 
       flows = res.flows || [];
     } catch (err) {
-      console.error('[FlowPromptBot] Modal error', err);
+      console.error('[FlowPromptBot] Failed to fetch flows', err);
     }
 
     let options = '<option value="">Skip (no flow)</option>';
 
-    flows.forEach((f) => {
-      options += `<option value="${f.id}">${f.name}</option>`;
+    flows.forEach((flow) => {
+      options += `<option value="${flow.id}">${flow.name}</option>`;
     });
 
     const modal = $(`
-        <div class="modal fade">
+        <div class="modal fade" tabindex="-1">
           <div class="modal-dialog">
             <div class="modal-content">
               <div class="modal-header">
-                <h5>Select Flow (optional)</h5>
+                <h5 class="modal-title">Select Flow (optional)</h5>
               </div>
               <div class="modal-body">
                 <select class="form-control js-flow-select">
