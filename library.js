@@ -1,79 +1,44 @@
-const winston = require.main.require('winston');
-const axios = require('axios');
-
-const PLUGIN_ID = 'nodebb-plugin-flowprompt-bot';
-
-const { FLOWPROMPT_API_URL } = process.env;
-const { FLOWPROMPT_API_KEY } = process.env;
+const meta = require.main.require('./src/meta');
 
 const Plugin = {};
 
-Plugin.init = async ({ router, middleware }) => {
-  winston.info('[FlowPromptBot] Plugin loaded');
+Plugin.init = async () => {
+  console.log('[FlowPromptBot] Plugin initialized');
+};
 
-  /**
-   * GET user flows
-   */
-  router.get(
-    `/api/plugins/${PLUGIN_ID}/flows`,
-    middleware.ensureLoggedIn,
-    async (req, res) => {
-      try {
-        winston.info('[FlowPromptBot] /flows API called');
+/**
+ * Hook: fires AFTER topic is created
+ */
+Plugin.onTopicCreate = async (data) => {
+  try {
+    const { topic } = data;
 
-        const response = await axios.get(`${FLOWPROMPT_API_URL}/flows`, {
-          headers: {
-            Authorization: `Bearer ${FLOWPROMPT_API_KEY}`,
-            'x-user-id': req.user.uid,
-          },
-          timeout: 5000,
-        });
+    if (!topic || !topic.title) return;
 
-        res.json({
-          success: true,
-          flows: response.data || [],
-        });
-      } catch (err) {
-        winston.error('[FlowPromptBot] Failed to fetch flows', err.message);
-        res.status(500).json({
-          success: false,
-          flows: [],
-        });
-      }
-    },
-  );
+    console.log('[FlowPromptBot] Topic created:', topic.tid);
+    console.log('[FlowPromptBot] Topic title:', topic.title);
 
-  /**
-   * POST link flow to topic
-   */
-  router.post(
-    `/api/plugins/${PLUGIN_ID}/link`,
-    middleware.ensureLoggedIn,
-    async (req, res) => {
-      const { tid, flowId } = req.body;
+    // Extract flowId from title
+    const match = topic.title.match(/(?:flow|flowId)\s*[:=]\s*(\w+)/i);
 
-      if (!flowId) {
-        return res.json({ success: true });
-      }
+    if (!match) {
+      console.log('[FlowPromptBot] No flowId found in title');
+      return;
+    }
 
-      try {
-        await axios.post(
-          `${FLOWPROMPT_API_URL}/link-topic`,
-          { tid, flowId },
-          {
-            headers: {
-              Authorization: `Bearer ${FLOWPROMPT_API_KEY}`,
-            },
-          },
-        );
+    const flowId = match[1];
 
-        res.json({ success: true });
-      } catch (err) {
-        winston.error('[FlowPromptBot] Failed to link flow', err.message);
-        res.status(500).json({ success: false });
-      }
-    },
-  );
+    console.log('[FlowPromptBot] ✅ flowId extracted:', flowId);
+
+    /**
+     * 🔜 Future:
+     * - Store mapping tid -> flowId
+     * - Call FlowPrompt API
+     * - Auto reply
+     */
+  } catch (err) {
+    console.error('[FlowPromptBot] onTopicCreate error', err);
+  }
 };
 
 module.exports = Plugin;
