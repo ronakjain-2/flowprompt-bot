@@ -2,7 +2,7 @@
 
 (function () {
   const PLUGIN_ID = 'nodebb-plugin-flowprompt-bot';
-  const SUPPORT_CATEGORY_ID = 6;
+  const SUPPORT_CATEGORY_ID = '6';
 
   let selectedFlowId = null;
   let modalOpened = false;
@@ -14,27 +14,38 @@
    */
   $(window).on('action:composer.loaded', () => {
     console.log('[FlowPromptBot] composer.loaded fired');
+
     modalOpened = false;
     selectedFlowId = null;
+
+    waitForCategoryDropdown();
   });
 
   /**
-   * 🔥 Fires when category dropdown changes (NodeBB v4)
+   * Watch DOM for category changes (NodeBB-crash safe)
    */
-  $(window).on('action:composer.categoryChanged', (ev, data) => {
-    const cid = parseInt(data?.cid, 10);
+  function waitForCategoryDropdown() {
+    const interval = setInterval(() => {
+      const $select = $('.composer select[name="cid"]');
 
-    console.log('[FlowPromptBot] categoryChanged event', cid);
+      if (!$select.length) return;
 
-    if (modalOpened) return;
+      clearInterval(interval);
 
-    if (cid !== SUPPORT_CATEGORY_ID) return;
+      console.log('[FlowPromptBot] Category dropdown detected');
 
-    console.log('[FlowPromptBot] Support category detected');
-    modalOpened = true;
+      $select.on('change', function () {
+        const cid = $(this).val();
 
-    openFlowModal();
-  });
+        console.log('[FlowPromptBot] Category changed to', cid);
+
+        if (cid === SUPPORT_CATEGORY_ID && !modalOpened) {
+          modalOpened = true;
+          openFlowModal();
+        }
+      });
+    }, 200);
+  }
 
   /**
    * After topic creation → link flow
