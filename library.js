@@ -4,37 +4,39 @@ const SUPPORT_CATEGORY_ID = Number(process.env.SUPPORT_CATEGORY_ID);
 
 const Plugin = {};
 
-/* ---------------------------------------------
+/* -----------------------------------------
  * Expose config to browser
- * ------------------------------------------- */
+ * --------------------------------------- */
 Plugin.exposeConfig = async function (config) {
   config.flowpromptSupportCategoryId = SUPPORT_CATEGORY_ID;
   return config;
 };
 
-/* ---------------------------------------------
- * Inject HTML into composer template
- * ------------------------------------------- */
-Plugin.injectComposerUI = async function (data) {
-  data.templateData.flowpromptFlowSelector = `
-    <div class="form-group flowprompt-flow-wrapper d-none">
-      <label>Flow (optional)</label>
-      <select class="form-control" id="flowprompt-flow-select">
-        <option value="">No Flow</option>
-      </select>
-    </div>
-  `;
-  return data;
+/* -----------------------------------------
+ * ADD COMPOSER CONTROL (THIS IS THE KEY)
+ * --------------------------------------- */
+Plugin.addComposerControl = async function (controls) {
+  controls.push({
+    name: 'flowprompt-flow',
+    label: 'Flow (optional)',
+    className: 'flowprompt-flow-control',
+    type: 'select',
+    options: [], // populated client-side
+  });
+
+  winston.info('[FlowPromptBot] Composer control registered');
+  return controls;
 };
 
-/* ---------------------------------------------
+/* -----------------------------------------
  * Topic create hook
- * ------------------------------------------- */
+ * --------------------------------------- */
 Plugin.onTopicCreate = async function (hookData) {
-  const flowId = hookData.req?.body?.flowId || hookData.data?.flowId || null;
+  const flowId =
+    hookData.req?.body?.flowpromptFlow || hookData.data?.flowpromptFlow || null;
 
   if (flowId) {
-    winston.info('[FlowPromptBot] Flow selected:', flowId);
+    winston.info('[FlowPromptBot] Topic created with flow:', flowId);
   }
 
   return hookData;

@@ -1,47 +1,46 @@
 (function () {
   const API_URL = '/api/plugins/nodebb-plugin-flowprompt-bot/flows';
 
-  async function loadFlows() {
+  async function fetchFlows() {
     const res = await fetch(API_URL, { credentials: 'include' });
     const json = await res.json();
 
     return json?.data || [];
   }
 
-  $(window).on('action:composer.rendered', async (e, data) => {
+  $(window).on('action:composer.loaded', async (e, data) => {
     const { composer } = data;
 
     if (!composer) return;
 
     const supportCid = Number(window.flowpromptSupportCategoryId);
-    const currentCid = Number(composer.category?.cid);
+    const cid = Number(composer.category?.cid);
 
-    const wrapper = $('.flowprompt-flow-wrapper');
+    const control = composer.controls?.['flowprompt-flow'];
 
-    if (!wrapper.length) return;
+    if (!control) return;
 
-    if (currentCid !== supportCid) {
-      wrapper.addClass('d-none');
+    if (cid !== supportCid) {
+      control.hide();
       return;
     }
 
-    wrapper.removeClass('d-none');
+    control.show();
 
-    const select = $('#flowprompt-flow-select');
+    if (control._loaded) return;
 
-    if (select.data('loaded')) return;
+    const flows = await fetchFlows();
 
-    const flows = await loadFlows();
+    control.setOptions([
+      { value: '', label: 'No Flow' },
+      ...flows.map((f) => ({ value: f.id, label: f.name })),
+    ]);
 
-    flows.forEach((flow) => {
-      select.append(`<option value="${flow.id}">${flow.name}</option>`);
+    control.onChange((value) => {
+      composer.setData('flowpromptFlow', value || null);
     });
 
-    select.on('change', function () {
-      composer.setData('flowId', this.value || null);
-    });
-
-    select.data('loaded', true);
+    control._loaded = true;
     console.log('[FlowPromptBot] Flow dropdown ready');
   });
 })();

@@ -1,10 +1,10 @@
 {
   "id": "nodebb-plugin-flowprompt-bot",
   "name": "FlowPrompt Support Bot",
-  "description": "Optional Flow selector for support topics",
+  "description": "Adds optional Flow selector to support category composer",
   "library": "./library.js",
   "hooks": [
-    { "hook": "filter:composer.render", "method": "injectComposerUI" },
+    { "hook": "filter:composer.controls", "method": "addComposerControl" },
     { "hook": "filter:config.get", "method": "exposeConfig" },
     { "hook": "filter:topic.create", "method": "onTopicCreate" }
   ],
