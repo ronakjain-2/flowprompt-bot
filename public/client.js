@@ -1,46 +1,64 @@
-(function () {
-  const API_URL = '/api/plugins/nodebb-plugin-flowprompt-bot/flows';
+(async function () {
+  const SUPPORT_CID = Number(window.flowpromptSupportCategoryId);
+  let lastTopicId = null;
+
+  socket.on('flowprompt:topicCreated', async (payload) => {
+    if (!payload || payload.cid !== SUPPORT_CID) return;
+
+    lastTopicId = payload.tid;
+    showFlowModal();
+  });
 
   async function fetchFlows() {
-    const res = await fetch(API_URL, { credentials: 'include' });
+    const res = await fetch('/api/plugins/nodebb-plugin-flowprompt-bot/flows', {
+      credentials: 'include',
+    });
     const json = await res.json();
 
     return json?.data || [];
   }
 
-  $(window).on('action:composer.loaded', async (e, data) => {
-    const { composer } = data;
-
-    if (!composer) return;
-
-    const supportCid = Number(window.flowpromptSupportCategoryId);
-    const cid = Number(composer.category?.cid);
-
-    const control = composer.controls?.['flowprompt-flow'];
-
-    if (!control) return;
-
-    if (cid !== supportCid) {
-      control.hide();
-      return;
-    }
-
-    control.show();
-
-    if (control._loaded) return;
-
+  async function showFlowModal() {
     const flows = await fetchFlows();
 
-    control.setOptions([
-      { value: '', label: 'No Flow' },
-      ...flows.map((f) => ({ value: f.id, label: f.name })),
-    ]);
+    const options = flows.length
+      ? flows.map((f) => `<option value="${f.id}">${f.name}</option>`).join('')
+      : '<option disabled>No flows available</option>';
 
-    control.onChange((value) => {
-      composer.setData('flowpromptFlow', value || null);
+    const modal = app.alert({
+      title: 'Link a Flow (optional)',
+      message: `
+        <select class="form-control" id="flowprompt-flow-select">
+          <option value="">Skip</option>
+          ${options}
+        </select>
+      `,
+      buttons: {
+        ok: {
+          text: 'Save',
+          className: 'btn-primary',
+        },
+        cancel: {
+          text: 'Skip',
+          className: 'btn-default',
+        },
+      },
     });
 
-    control._loaded = true;
-    console.log('[FlowPromptBot] Flow dropdown ready');
-  });
+    modal.on('click', '.btn-primary', async () => {
+      const flowId = $('#flowprompt-flow-select').val();
+
+      if (!flowId) return;
+
+      await fetch('/api/plugins/nodebb-plugin-flowprompt-bot/link-flow', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tid: lastTopicId,
+          flowId,
+        }),
+      });
+    });
+  }
 })();
