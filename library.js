@@ -11,14 +11,14 @@ const fpConfig = nconf.get('flowprompt') || {};
 const SUPPORT_CATEGORY_ID = Number(fpConfig.supportCategoryId);
 const WEBHOOK_URL = fpConfig.webhookUrl;
 const WEBHOOK_SECRET = fpConfig.webhookSecret;
-const FLOWPROMPT_API_URL = fpConfig.apiUrl || '';
+const FLOWPROMPT_API_URL = fpConfig.flowpromptAPIBaseUrl || '';
 const FLOWPROMPT_API_TOKEN = fpConfig.apiToken || '';
 const BOT_UID = Number(fpConfig.botUid) || 0;
 
 winston.info('[FlowPromptBot] Plugin loaded', {
   supportCategoryId: SUPPORT_CATEGORY_ID,
-  webhookUrl: WEBHOOK_URL ? 'configured' : 'missing',
-  apiUrl: FLOWPROMPT_API_URL ? 'configured' : 'missing',
+  webhookUrl: WEBHOOK_URL,
+  flowpromptAPIBaseUrl: FLOWPROMPT_API_URL,
   botUid: BOT_UID || 'not set',
 });
 
