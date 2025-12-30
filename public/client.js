@@ -5,47 +5,34 @@
   const SUPPORT_CATEGORY_ID = '6';
 
   let selectedFlowId = null;
-  let modalOpened = false;
+  let modalOpenedForTid = null;
 
   console.log('[FlowPromptBot] client.js LOADED');
 
   /**
    * Composer opened
    */
-  $(window).on('action:composer.loaded', () => {
+  $(window).on('action:composer.loaded', (ev, data) => {
     console.log('[FlowPromptBot] composer.loaded fired');
-
-    modalOpened = false;
+    modalOpenedForTid = data?.tid || 'new';
     selectedFlowId = null;
-
-    waitForCategoryDropdown();
   });
 
   /**
-   * Wait until category dropdown exists (NodeBB v4)
+   * 🔑 CATEGORY CHANGE — this is the missing piece
    */
-  function waitForCategoryDropdown() {
-    const interval = setInterval(() => {
-      const $select = $('select[data-action="category"]');
+  $(window).on('action:composer.categoryChange', (ev, data) => {
+    console.log('[FlowPromptBot] composer.categoryChange fired', data);
 
-      if (!$select.length) return;
+    const cid = String(data.cid);
 
-      clearInterval(interval);
+    if (cid !== SUPPORT_CATEGORY_ID) return;
 
-      console.log('[FlowPromptBot] Category dropdown detected');
+    if (modalOpenedForTid === 'opened') return;
 
-      $select.off('change.flowprompt').on('change.flowprompt', function () {
-        const cid = $(this).val();
-
-        console.log('[FlowPromptBot] Category changed to', cid);
-
-        if (cid === SUPPORT_CATEGORY_ID && !modalOpened) {
-          modalOpened = true;
-          openFlowModal();
-        }
-      });
-    }, 200);
-  }
+    modalOpenedForTid = 'opened';
+    openFlowModal();
+  });
 
   /**
    * After topic creation → link flow
@@ -69,16 +56,14 @@
 
   async function openFlowModal() {
     console.log('[FlowPromptBot] Opening Flow modal');
+    console.log('[FlowPromptBot] Fetching flows');
 
     let flows = [];
 
     try {
-      console.log('[FlowPromptBot] Fetching flows');
-
       const res = await $.get(`/api/plugins/${PLUGIN_ID}/flows`);
 
       flows = res.flows || [];
-      console.log('[FlowPromptBot] Flows loaded:', flows.length);
     } catch (err) {
       console.error('[FlowPromptBot] Failed to fetch flows', err);
     }
