@@ -1,11 +1,15 @@
 {
   "id": "nodebb-plugin-flowprompt-bot",
   "name": "FlowPrompt Support Bot",
-  "description": "Sends support topics/posts to FlowPrompt backend and posts automated replies",
+  "description": "Sends support topics/posts to FlowPrompt backend and posts automated replies. Allows optional Flow linking to topics.",
   "url": "https://flowprompt.ai",
   "library": "./library.js",
+  "staticDirs": {
+    "public": "./public"
+  },
   "hooks": [
     { "hook": "static:app.load", "method": "init" },
+    { "hook": "static:router.setup", "method": "setupRoutes" },
     {
       "hook": "filter:topic.create",
       "method": "onTopicCreate",
