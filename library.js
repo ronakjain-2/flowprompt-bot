@@ -1,13 +1,31 @@
-const meta = require.main.require('./src/meta');
+const topics = require.main.require('./src/topics');
+const posts = require.main.require('./src/posts');
+const nconf = require.main.require('nconf');
 
 const Plugin = {};
 
+// ✅ Read values from nested config
+const FLOWPROMPT_CONFIG = nconf.get('flowprompt') || {};
+
+const SUPPORT_CATEGORY_ID = Number(FLOWPROMPT_CONFIG.supportCategoryId) || null;
+const WEBHOOK_URL = FLOWPROMPT_CONFIG.webhookUrl || null;
+const WEBHOOK_SECRET = FLOWPROMPT_CONFIG.webhookSecret || null;
+const FLOWPROMPT_API_BASE = FLOWPROMPT_CONFIG.flowpromptAPIBaseUrl || null;
+const BOT_UID = Number(FLOWPROMPT_CONFIG.botUid) || 66;
+
 Plugin.init = async () => {
   console.log('[FlowPromptBot] Plugin initialized');
+  console.log('[FlowPromptBot] Config loaded:', {
+    SUPPORT_CATEGORY_ID,
+    WEBHOOK_URL: !!WEBHOOK_URL,
+    WEBHOOK_SECRET: !!WEBHOOK_SECRET,
+    FLOWPROMPT_API_BASE,
+    BOT_UID,
+  });
 };
 
 /**
- * Hook: fires AFTER topic is created
+ * 1️⃣ Extract flowId from topic title and store it
  */
 Plugin.onTopicCreate = async (data) => {
   try {
@@ -15,10 +33,6 @@ Plugin.onTopicCreate = async (data) => {
 
     if (!topic || !topic.title) return;
 
-    console.log('[FlowPromptBot] Topic created:', topic.tid);
-    console.log('[FlowPromptBot] Topic title:', topic.title);
-
-    // Extract flowId from title
     const match = topic.title.match(/(?:flow|flowId)\s*[:=]\s*(\w+)/i);
 
     if (!match) {
@@ -28,16 +42,40 @@ Plugin.onTopicCreate = async (data) => {
 
     const flowId = match[1];
 
-    console.log('[FlowPromptBot] ✅ flowId extracted:', flowId);
+    await topics.setTopicField(topic.tid, 'flowId', flowId);
 
-    /**
-     * 🔜 Future:
-     * - Store mapping tid -> flowId
-     * - Call FlowPrompt API
-     * - Auto reply
-     */
+    console.log('[FlowPromptBot] flowId saved:', flowId);
   } catch (err) {
     console.error('[FlowPromptBot] onTopicCreate error', err);
+  }
+};
+
+/**
+ * 2️⃣ Reply using bot if flowId exists
+ */
+Plugin.onPostSave = async (data) => {
+  try {
+    const { post } = data;
+
+    if (!post || post.isMain) return;
+
+    if (post.uid === BOT_UID) return;
+
+    const flowId = await topics.getTopicField(post.tid, 'flowId');
+
+    if (!flowId) return;
+
+    console.log('[FlowPromptBot] Reply detected for flow:', flowId);
+
+    await posts.create({
+      tid: post.tid,
+      uid: BOT_UID,
+      content: `🤖 **FlowPromptSupportBot**\n\nDummy response for flow **${flowId}**.\n\n(FlowPrompt logic will be added later.)`,
+    });
+
+    console.log('[FlowPromptBot] Bot reply posted');
+  } catch (err) {
+    console.error('[FlowPromptBot] onPostSave error', err);
   }
 };
 

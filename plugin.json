@@ -1,8 +1,11 @@
 {
   "id": "nodebb-plugin-flowprompt-bot",
   "name": "FlowPrompt Bot",
-  "description": "FlowPrompt integration",
+  "description": "Replies automatically when flowId exists",
   "version": "1.0.0",
   "library": "library.js",
-  "hooks": [{ "hook": "action:topic.save", "method": "onTopicCreate" }]
+  "hooks": [
+    { "hook": "action:topic.save", "method": "onTopicCreate" },
+    { "hook": "action:post.save", "method": "onPostSave" }
+  ]
 }
