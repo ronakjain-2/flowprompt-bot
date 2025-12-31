@@ -70,11 +70,11 @@ Plugin.onPostSave = async ({ post }) => {
       'email',
     ]);
 
-    await posts.create({
-      tid: post.tid,
-      uid: BOT_UID,
-      content: '🤖 **FlowPromptSupportBot** is running the flow...',
-    });
+    // await posts.create({
+    //   tid: post.tid,
+    //   uid: BOT_UID,
+    //   content: '🤖 **FlowPromptSupportBot** is running the flow...',
+    // });
 
     // Call FlowPrompt API which will execute flow and post reply to NodeBB
     const apiResponse = await runFlow({
