@@ -64,8 +64,11 @@ Plugin.onPostSave = async ({ post }) => {
     console.log('[FlowPromptBot] Reply detected for flow:', flowId);
 
     // Get user token (example: uid-based or custom field)
-    const userData = await users.getUserFields(post.uid, ['uid', 'username']);
-    const userToken = `nodebb-user-${userData.uid}`;
+    const userData = await users.getUserFields(post.uid, [
+      'uid',
+      'username',
+      'email',
+    ]);
 
     await posts.create({
       tid: post.tid,
@@ -73,21 +76,26 @@ Plugin.onPostSave = async ({ post }) => {
       content: '🤖 **FlowPromptSupportBot** is running the flow...',
     });
 
+    // Call FlowPrompt API which will execute flow and post reply to NodeBB
     const apiResponse = await runFlow({
       flowId,
       input: post.content,
-      userToken,
-    });
-
-    const botReply = apiResponse || '⚠️ Flow returned no response.';
-
-    await posts.create({
       tid: post.tid,
-      uid: BOT_UID,
-      content: botReply,
+      userEmail: userData?.email,
     });
 
-    console.log('[FlowPromptBot] Bot reply posted');
+    // Backend service already posts the reply via NodeBB API, so we don't need to post again
+    // The API response contains the output for logging/verification
+    if (apiResponse) {
+      console.log('[FlowPromptBot] Flow executed successfully', {
+        tid: post.tid,
+        outputLength: apiResponse.length,
+      });
+    } else {
+      console.log(
+        '[FlowPromptBot] Flow execution completed but no output returned',
+      );
+    }
   } catch (err) {
     console.error('[FlowPromptBot] onPostSave error', err);
   }
@@ -95,7 +103,7 @@ Plugin.onPostSave = async ({ post }) => {
 
 // ================= HELPERS =================
 
-async function runFlow({ flowId, input, userToken }) {
+async function runFlow({ flowId, input, tid, userEmail }) {
   try {
     console.log('[FlowPromptBot] Calling FlowPrompt API', flowId);
 
@@ -104,12 +112,15 @@ async function runFlow({ flowId, input, userToken }) {
       {
         flowId,
         input,
-        userToken,
+        tid,
+        userEmail,
       },
       {
         timeout: 15000,
       },
     );
+
+    console.log('[FlowPromptBot] FlowPrompt API response', res);
 
     if (res.data && res.data.output) {
       return `🤖 **FlowPromptSupportBot**\n\n${res.data.output}`;
