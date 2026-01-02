@@ -28,7 +28,6 @@ Plugin.init = async () => {
 
 /**
  * Extract flowId from topic title and store it
- * Example: "Issue with webhook flow:fp_12345"
  */
 Plugin.onTopicCreate = async ({ topic }) => {
   try {
@@ -41,6 +40,7 @@ Plugin.onTopicCreate = async ({ topic }) => {
     const flowId = match[1];
 
     await topics.setTopicField(topic.tid, 'flowId', flowId);
+    await topics.setTopicField(topic.tid, 'allowedUids', JSON.stringify([]));
 
     console.log('[FlowPromptBot] flowId stored:', {
       tid: topic.tid,
@@ -52,10 +52,7 @@ Plugin.onTopicCreate = async ({ topic }) => {
 };
 
 /**
- * Trigger flow ONLY when:
- * - Reply is to the topic (not to another reply)
- * - Reply author is NOT topic creator
- * - Reply author is NOT bot
+ * Trigger flow ONLY when valid invited reply
  */
 Plugin.onPostSave = async ({ post }) => {
   try {
@@ -67,7 +64,7 @@ Plugin.onPostSave = async ({ post }) => {
     // Ignore bot replies
     if (post.uid === BOT_UID) return;
 
-    // Ignore replies to replies (nested replies)
+    // Ignore replies to replies
     if (post.toPid) {
       console.log('[FlowPromptBot] Ignoring reply-to-reply', {
         pid: post.pid,
@@ -84,11 +81,37 @@ Plugin.onPostSave = async ({ post }) => {
 
     if (!topic) return;
 
-    // Ignore replies from topic creator
-    if (post.uid === topic.uid) {
+    const topicOwnerUid = topic.uid;
+
+    // Handle invite command
+    if (post.content.startsWith('/invite')) {
+      if (post.uid !== topicOwnerUid) {
+        await posts.delete(post.pid);
+        console.log('[FlowPromptBot] Invite rejected: not topic owner');
+        return;
+      }
+
+      await handleInvite(post);
+      return;
+    }
+
+    // Ignore replies from topic owner
+    if (post.uid === topicOwnerUid) {
       console.log('[FlowPromptBot] Ignoring topic-owner reply', {
         tid: post.tid,
         uid: post.uid,
+      });
+      return;
+    }
+
+    // Check invite permission
+    const isAllowed = await isUserAllowed(post.tid, post.uid);
+
+    if (!isAllowed) {
+      await posts.delete(post.pid);
+      console.log('[FlowPromptBot] Reply blocked: user not invited', {
+        uid: post.uid,
+        tid: post.tid,
       });
       return;
     }
@@ -116,7 +139,48 @@ Plugin.onPostSave = async ({ post }) => {
   }
 };
 
-// ================= HELPERS =================
+// ================= INVITES =================
+
+async function handleInvite(post) {
+  const usernames =
+    post.content.match(/@([\w-]+)/g)?.map((u) => u.slice(1)) || [];
+
+  if (!usernames.length) return;
+
+  const allowedUids = JSON.parse(
+    (await topics.getTopicField(post.tid, 'allowedUids')) || '[]',
+  );
+
+  for (const username of usernames) {
+    const uid = await users.getUidByUsername(username);
+
+    if (uid && !allowedUids.includes(uid)) {
+      allowedUids.push(uid);
+    }
+  }
+
+  await topics.setTopicField(
+    post.tid,
+    'allowedUids',
+    JSON.stringify(allowedUids),
+  );
+
+  console.log('[FlowPromptBot] Users invited:', allowedUids);
+}
+
+async function isUserAllowed(tid, uid) {
+  const topic = await topics.getTopicFields(tid, ['uid']);
+
+  if (uid === topic.uid) return true;
+
+  const allowedUids = JSON.parse(
+    (await topics.getTopicField(tid, 'allowedUids')) || '[]',
+  );
+
+  return allowedUids.includes(uid);
+}
+
+// ================= FLOW =================
 
 async function runFlow({ flowId, input, tid, userEmail }) {
   try {
