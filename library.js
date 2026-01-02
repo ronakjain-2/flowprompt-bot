@@ -1,7 +1,9 @@
 const axios = require('axios');
 
 const topics = require.main.require('./src/topics');
+const posts = require.main.require('./src/posts');
 const users = require.main.require('./src/user');
+const utils = require.main.require('./src/utils');
 const nconf = require.main.require('nconf');
 
 const Plugin = {};
@@ -17,7 +19,8 @@ const BOT_UID = Number(FLOWPROMPT_CONFIG.botUid) || 66;
 // ==========================================
 
 Plugin.init = async () => {
-  console.log('[FlowPromptBot] Plugin initialized, Config:', {
+  console.log('[FlowPromptBot] Plugin initialized');
+  console.log('[FlowPromptBot] Config:', {
     SUPPORT_CATEGORY_ID,
     FLOWPROMPT_API_BASE,
     BOT_UID,
@@ -25,26 +28,9 @@ Plugin.init = async () => {
 };
 
 /**
- * Mask flowId ONLY in topic title (UI safety)
- */
-function maskFlowIdInTitle(title, flowId) {
-  if (!title || !flowId) return title;
-
-  return title.replace(new RegExp(flowId, 'g'), '********');
-}
-
-/**
- * Extract flowId from topic title, store internally,
- * but mask it in the visible topic title
- *
- * Example input:
- *   "Run billing flow flowId=fp_12345"
- *
- * Stored:
- *   flowId = fp_12345
- *
- * Visible title:
- *   "Run billing flow ********"
+ * Extract flowId from topic title
+ * Store real flowId internally
+ * Mask flowId in visible title
  */
 Plugin.onTopicCreate = async ({ topic }) => {
   try {
@@ -59,28 +45,26 @@ Plugin.onTopicCreate = async ({ topic }) => {
     // Store real flowId internally
     await topics.setTopicField(topic.tid, 'flowId', flowId);
 
-    // (future use) invited users list
-    await topics.setTopicField(topic.tid, 'allowedUids', JSON.stringify([]));
-
-    // Mask flowId in title for UI
-    const maskedTitle = maskFlowIdInTitle(topic.title, flowId);
+    // Mask flowId in title
+    const maskedTitle = topic.title.replace(
+      new RegExp(flowId, 'g'),
+      '********',
+    );
 
     if (maskedTitle !== topic.title) {
-      await topics.setTopicField(topic.tid, 'title', maskedTitle);
-      await topics.setTopicField(
-        topic.tid,
-        'slug',
-        topics.slugify(maskedTitle),
-      );
+      // Explicitly generate slug (requested)
+      const slug = utils.slugify(maskedTitle);
+
+      await topics.updateTopic(topic.tid, {
+        title: maskedTitle,
+        slug,
+      });
     }
 
-    console.log(
-      `[FlowPromptBot] flowId stored & title masked flowId: ${flowId}`,
-      {
-        tid: topic.tid,
-        maskedTitle,
-      },
-    );
+    console.log('[FlowPromptBot] flowId stored & title masked', {
+      tid: topic.tid,
+      flowId: '********',
+    });
   } catch (err) {
     console.error('[FlowPromptBot] onTopicCreate error', err);
   }
@@ -88,9 +72,10 @@ Plugin.onTopicCreate = async ({ topic }) => {
 
 /**
  * Trigger flow ONLY when:
- * - Reply is to the topic (not to another reply)
- * - Reply author is NOT topic creator
- * - Reply author is NOT bot
+ * - Not main post
+ * - Not bot
+ * - Not reply-to-reply
+ * - Not topic owner
  */
 Plugin.onPostSave = async ({ post }) => {
   try {
@@ -102,7 +87,7 @@ Plugin.onPostSave = async ({ post }) => {
     // Ignore bot replies
     if (post.uid === BOT_UID) return;
 
-    // Ignore replies to replies (nested replies)
+    // Ignore replies to replies
     if (post.toPid) {
       console.log('[FlowPromptBot] Ignoring reply-to-reply', {
         pid: post.pid,
@@ -119,7 +104,7 @@ Plugin.onPostSave = async ({ post }) => {
 
     if (!topic) return;
 
-    // Ignore replies from topic creator
+    // Ignore topic owner replies
     if (post.uid === topic.uid) {
       console.log('[FlowPromptBot] Ignoring topic-owner reply', {
         tid: post.tid,
@@ -130,7 +115,7 @@ Plugin.onPostSave = async ({ post }) => {
 
     console.log('[FlowPromptBot] Valid reply detected → running flow', {
       tid: post.tid,
-      flowId,
+      flowId: '********',
       replyUid: post.uid,
     });
 
@@ -156,7 +141,7 @@ Plugin.onPostSave = async ({ post }) => {
 async function runFlow({ flowId, input, tid, userEmail }) {
   try {
     console.log('[FlowPromptBot] Calling FlowPrompt API', {
-      flowId,
+      flowId: '********',
       tid,
       userEmail,
     });
