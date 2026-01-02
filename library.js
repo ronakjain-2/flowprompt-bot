@@ -1,7 +1,6 @@
 const axios = require('axios');
 
 const topics = require.main.require('./src/topics');
-const posts = require.main.require('./src/posts');
 const users = require.main.require('./src/user');
 const nconf = require.main.require('nconf');
 
@@ -18,8 +17,7 @@ const BOT_UID = Number(FLOWPROMPT_CONFIG.botUid) || 66;
 // ==========================================
 
 Plugin.init = async () => {
-  console.log('[FlowPromptBot] Plugin initialized');
-  console.log('[FlowPromptBot] Config:', {
+  console.log('[FlowPromptBot] Plugin initialized, Config:', {
     SUPPORT_CATEGORY_ID,
     FLOWPROMPT_API_BASE,
     BOT_UID,
@@ -27,7 +25,26 @@ Plugin.init = async () => {
 };
 
 /**
- * Extract flowId from topic title and store it
+ * Mask flowId ONLY in topic title (UI safety)
+ */
+function maskFlowIdInTitle(title, flowId) {
+  if (!title || !flowId) return title;
+
+  return title.replace(new RegExp(flowId, 'g'), '********');
+}
+
+/**
+ * Extract flowId from topic title, store internally,
+ * but mask it in the visible topic title
+ *
+ * Example input:
+ *   "Run billing flow flowId=fp_12345"
+ *
+ * Stored:
+ *   flowId = fp_12345
+ *
+ * Visible title:
+ *   "Run billing flow ********"
  */
 Plugin.onTopicCreate = async ({ topic }) => {
   try {
@@ -39,20 +56,41 @@ Plugin.onTopicCreate = async ({ topic }) => {
 
     const flowId = match[1];
 
+    // Store real flowId internally
     await topics.setTopicField(topic.tid, 'flowId', flowId);
+
+    // (future use) invited users list
     await topics.setTopicField(topic.tid, 'allowedUids', JSON.stringify([]));
 
-    console.log('[FlowPromptBot] flowId stored:', {
-      tid: topic.tid,
-      flowId,
-    });
+    // Mask flowId in title for UI
+    const maskedTitle = maskFlowIdInTitle(topic.title, flowId);
+
+    if (maskedTitle !== topic.title) {
+      await topics.setTopicField(topic.tid, 'title', maskedTitle);
+      await topics.setTopicField(
+        topic.tid,
+        'slug',
+        topics.slugify(maskedTitle),
+      );
+    }
+
+    console.log(
+      `[FlowPromptBot] flowId stored & title masked flowId: ${flowId}`,
+      {
+        tid: topic.tid,
+        maskedTitle,
+      },
+    );
   } catch (err) {
     console.error('[FlowPromptBot] onTopicCreate error', err);
   }
 };
 
 /**
- * Trigger flow ONLY when valid invited reply
+ * Trigger flow ONLY when:
+ * - Reply is to the topic (not to another reply)
+ * - Reply author is NOT topic creator
+ * - Reply author is NOT bot
  */
 Plugin.onPostSave = async ({ post }) => {
   try {
@@ -64,7 +102,7 @@ Plugin.onPostSave = async ({ post }) => {
     // Ignore bot replies
     if (post.uid === BOT_UID) return;
 
-    // Ignore replies to replies
+    // Ignore replies to replies (nested replies)
     if (post.toPid) {
       console.log('[FlowPromptBot] Ignoring reply-to-reply', {
         pid: post.pid,
@@ -81,37 +119,11 @@ Plugin.onPostSave = async ({ post }) => {
 
     if (!topic) return;
 
-    const topicOwnerUid = topic.uid;
-
-    // Handle invite command
-    if (post.content.startsWith('/invite')) {
-      if (post.uid !== topicOwnerUid) {
-        await posts.delete(post.pid);
-        console.log('[FlowPromptBot] Invite rejected: not topic owner');
-        return;
-      }
-
-      await handleInvite(post);
-      return;
-    }
-
-    // Ignore replies from topic owner
-    if (post.uid === topicOwnerUid) {
+    // Ignore replies from topic creator
+    if (post.uid === topic.uid) {
       console.log('[FlowPromptBot] Ignoring topic-owner reply', {
         tid: post.tid,
         uid: post.uid,
-      });
-      return;
-    }
-
-    // Check invite permission
-    const isAllowed = await isUserAllowed(post.tid, post.uid);
-
-    if (!isAllowed) {
-      await posts.delete(post.pid);
-      console.log('[FlowPromptBot] Reply blocked: user not invited', {
-        uid: post.uid,
-        tid: post.tid,
       });
       return;
     }
@@ -139,48 +151,7 @@ Plugin.onPostSave = async ({ post }) => {
   }
 };
 
-// ================= INVITES =================
-
-async function handleInvite(post) {
-  const usernames =
-    post.content.match(/@([\w-]+)/g)?.map((u) => u.slice(1)) || [];
-
-  if (!usernames.length) return;
-
-  const allowedUids = JSON.parse(
-    (await topics.getTopicField(post.tid, 'allowedUids')) || '[]',
-  );
-
-  for (const username of usernames) {
-    const uid = await users.getUidByUsername(username);
-
-    if (uid && !allowedUids.includes(uid)) {
-      allowedUids.push(uid);
-    }
-  }
-
-  await topics.setTopicField(
-    post.tid,
-    'allowedUids',
-    JSON.stringify(allowedUids),
-  );
-
-  console.log('[FlowPromptBot] Users invited:', allowedUids);
-}
-
-async function isUserAllowed(tid, uid) {
-  const topic = await topics.getTopicFields(tid, ['uid']);
-
-  if (uid === topic.uid) return true;
-
-  const allowedUids = JSON.parse(
-    (await topics.getTopicField(tid, 'allowedUids')) || '[]',
-  );
-
-  return allowedUids.includes(uid);
-}
-
-// ================= FLOW =================
+// ================= HELPERS =================
 
 async function runFlow({ flowId, input, tid, userEmail }) {
   try {
