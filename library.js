@@ -1,7 +1,7 @@
 const axios = require('axios');
 
 const topics = require.main.require('./src/topics');
-const slugify = require.main.require('./src/slugify');
+const posts = require.main.require('./src/posts');
 const users = require.main.require('./src/user');
 const nconf = require.main.require('nconf');
 
@@ -54,11 +54,8 @@ Plugin.onTopicCreate = async ({ topic }) => {
     });
 
     const maskedTitle = maskFlowIdInTitle(topic.title, flowId);
-    const cleanTitle = topic.title.replace(/\[flowId:[^\]]+\]/gi, '').trim();
-    const newSlug = slugify(cleanTitle);
 
     await topics.setTopicField(topic.tid, 'title', maskedTitle);
-    await topics.setTopicField(topic.tid, 'slug', newSlug);
 
     console.log('[FlowPromptBot] Title masked', {
       tid: topic.tid,
@@ -174,6 +171,7 @@ Plugin.onPostSave = async ({ post }) => {
       flowId,
       input: post.content,
       tid: post.tid,
+      pid: post.pid,
       userEmail: user.email,
     });
   } catch (err) {
@@ -183,12 +181,14 @@ Plugin.onPostSave = async ({ post }) => {
 
 // ================= HELPERS =================
 
-async function runFlow({ flowId, input, tid, userEmail }) {
+async function runFlow({ flowId, input, tid, pid, userEmail }) {
   try {
     console.log('[FlowPromptBot] Calling FlowPrompt API', {
       flowId,
       tid,
+      pid,
       userEmail,
+      input,
     });
 
     await axios.post(
@@ -197,6 +197,7 @@ async function runFlow({ flowId, input, tid, userEmail }) {
         flowId,
         input,
         tid,
+        pid,
         userEmail,
       },
       { timeout: 15000 },
