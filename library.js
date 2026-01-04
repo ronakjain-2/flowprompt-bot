@@ -250,7 +250,9 @@ Plugin.filterPostCreate = async (data) => {
   console.log('[FlowPromptBot] filterPostCreate', data);
   const { post } = data;
 
-  if (!post?.isMain) return data;
+  const isMain = data?.data?.isMain || data?.isMain;
+
+  if (!isMain) return data;
 
   const topic = await topics.getTopicFields(post.tid, ['uid']);
 
