@@ -46,7 +46,10 @@ Plugin.onTopicCreate = async ({ topic }) => {
     const flowId = match[1];
 
     await topics.setTopicField(topic.tid, 'flowId', flowId);
-    await topics.setTopicField(topic.tid, 'invitedEmails', []);
+    await topics.setTopicFields(topic.tid, {
+      invitedEmails: [],
+      revokedEmails: [],
+    });
 
     console.log('[FlowPromptBot] flowId stored:', {
       tid: topic.tid,
@@ -72,25 +75,15 @@ Plugin.onTopicCreate = async ({ topic }) => {
  * - Enforce invite access
  * - Run flow only for valid invited replies
  */
+// =====================================================
+// POST SAVE
+// =====================================================
 Plugin.onPostSave = async ({ post }) => {
   try {
-    if (!post || post.isMain) return;
+    if (!post) return;
 
     // Ignore bot
     if (post.uid === BOT_UID) return;
-
-    // Ignore reply-to-reply
-    if (post.toPid) {
-      console.log('[FlowPromptBot] Ignoring reply-to-reply', {
-        pid: post.pid,
-        toPid: post.toPid,
-      });
-      return;
-    }
-
-    const flowId = await topics.getTopicField(post.tid, 'flowId');
-
-    if (!flowId) return;
 
     const topic = await topics.getTopicFields(post.tid, ['uid']);
 
@@ -102,69 +95,130 @@ Plugin.onPostSave = async ({ post }) => {
       'username',
     ]);
 
+    // =================================================
+    // 🟢 MAIN POST → extract flowId
+    // =================================================
+    if (post.isMain) {
+      if (post.uid !== topic.uid) return;
+
+      const match = post.content.match(/(?:flow|flowId)\s*[:=]?\s*([\w-]+)/i);
+
+      if (!match) return;
+
+      const flowId = match[1];
+
+      await topics.setTopicField(post.tid, 'flowId', flowId);
+
+      console.log('[FlowPromptBot] flowId set from main post', {
+        tid: post.tid,
+        flowId,
+      });
+
+      // Mask flowId in main post
+      await posts.edit({
+        pid: post.pid,
+        content: post.content.replace(new RegExp(flowId, 'g'), '********'),
+      });
+
+      return;
+    }
+
+    // =================================================
+    // 🔵 NORMAL REPLIES
+    // =================================================
+
+    // Ignore reply-to-reply
+    if (post.toPid) return;
+
+    const flowId = await topics.getTopicField(post.tid, 'flowId');
+
+    if (!flowId) return;
+
+    const invitedEmails =
+      (await topics.getTopicField(post.tid, 'invitedEmails')) || [];
+
+    const revokedEmails =
+      (await topics.getTopicField(post.tid, 'revokedEmails')) || [];
+
+    console.log('[FlowPromptBot] invitedEmails', invitedEmails);
+    console.log('[FlowPromptBot] revokedEmails', revokedEmails);
+
     // ---------------------------
     // INVITE COMMAND
     // ---------------------------
     if (post.content.startsWith('/invite')) {
-      if (post.uid !== topic.uid) {
-        console.log('[FlowPromptBot] Non-owner tried to invite');
-        return;
-      }
+      if (post.uid !== topic.uid) return;
 
-      const emails = post.content
-        .replace('/invite', '')
-        .split(',')
-        .map((e) => e.trim().toLowerCase())
-        .filter(Boolean);
+      const emails = extractEmails(post.content, '/invite');
 
       if (!emails.length) return;
 
-      const existing =
-        (await topics.getTopicField(post.tid, 'invitedEmails')) || [];
+      const updatedInvites = Array.from(new Set([...invitedEmails, ...emails]));
 
-      const updated = Array.from(new Set([...existing, ...emails]));
+      const updatedRevoked = revokedEmails.filter((e) => !emails.includes(e));
 
-      await topics.setTopicField(post.tid, 'invitedEmails', updated);
-
-      console.log('[FlowPromptBot] Users invited', {
-        tid: post.tid,
-        emails: updated,
+      await topics.setTopicFields(post.tid, {
+        invitedEmails: updatedInvites,
+        revokedEmails: updatedRevoked,
       });
 
-      return;
-    }
-
-    // Ignore topic-owner reply
-    if (post.uid === topic.uid) {
-      console.log('[FlowPromptBot] Ignoring topic-owner reply', {
-        tid: post.tid,
-        uid: post.uid,
-      });
+      console.log('[FlowPromptBot] Users invited', updatedInvites);
       return;
     }
 
     // ---------------------------
-    // INVITE ENFORCEMENT
+    // REVOKE COMMAND
     // ---------------------------
-    const invitedEmails =
-      (await topics.getTopicField(post.tid, 'invitedEmails')) || [];
+    if (post.content.startsWith('/revoke')) {
+      if (post.uid !== topic.uid) return;
 
-    if (!invitedEmails.includes(user.email)) {
-      console.log('[FlowPromptBot] Uninvited user reply ignored', {
-        tid: post.tid,
-        uid: post.uid,
-        email: user.email,
+      const emails = extractEmails(post.content, '/revoke');
+
+      if (!emails.length) return;
+
+      const updatedInvites = invitedEmails.filter((e) => !emails.includes(e));
+
+      const updatedRevoked = Array.from(new Set([...revokedEmails, ...emails]));
+
+      await topics.setTopicFields(post.tid, {
+        invitedEmails: updatedInvites,
+        revokedEmails: updatedRevoked,
       });
+
+      console.log('[FlowPromptBot] Users revoked', updatedRevoked);
       return;
     }
+
+    // Ignore topic owner replies
+    if (post.uid === topic.uid) return;
+
+    // ---------------------------
+    // ACCESS CONTROL
+    // ---------------------------
+
+    // ❌ Explicit revoke always blocks
+    if (revokedEmails.includes(user.email)) {
+      console.log('[FlowPromptBot] Revoked user blocked', user.email);
+      return;
+    }
+
+    // 🔐 Private topic (invite list exists)
+    if (invitedEmails.length > 0) {
+      if (!invitedEmails.includes(user.email)) {
+        console.log('[FlowPromptBot] Uninvited user blocked', user.email);
+        return;
+      }
+    }
+    // 🔓 Public topic → anyone allowed
 
     // ---------------------------
     // VALID FLOW EXECUTION
     // ---------------------------
-    console.log('[FlowPromptBot] Valid reply detected → running flow', {
+    console.log('[FlowPromptBot] Running flow', {
       tid: post.tid,
+      pid: post.pid,
       flowId,
-      replyUid: post.uid,
+      user: user.email,
     });
 
     await runFlow({
@@ -179,18 +233,19 @@ Plugin.onPostSave = async ({ post }) => {
   }
 };
 
-// ================= HELPERS =================
+// =====================================================
+// HELPERS
+// =====================================================
+function extractEmails(content, command) {
+  return content
+    .replace(command, '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+}
 
 async function runFlow({ flowId, input, tid, pid, userEmail }) {
   try {
-    console.log('[FlowPromptBot] Calling FlowPrompt API', {
-      flowId,
-      tid,
-      pid,
-      userEmail,
-      input,
-    });
-
     await axios.post(
       `${FLOWPROMPT_API_BASE}/api/forum/run-flow`,
       {
@@ -203,14 +258,12 @@ async function runFlow({ flowId, input, tid, pid, userEmail }) {
       { timeout: 15000 },
     );
 
-    console.log('[FlowPromptBot] FlowPrompt API called successfully');
-    return true;
+    console.log('[FlowPromptBot] Flow executed successfully');
   } catch (err) {
     console.error(
       '[FlowPromptBot] Flow API error',
       err.response?.data || err.message,
     );
-    return false;
   }
 }
 
