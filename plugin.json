@@ -7,6 +7,8 @@
   "hooks": [
     { "hook": "action:topic.create", "method": "onTopicCreate" },
     { "hook": "filter:post.save", "method": "filterPostSave" },
-    { "hook": "action:post.save", "method": "onPostSave" }
+    { "hook": "action:post.save", "method": "onPostSave" },
+    { "hook": "filter:post.create", "method": "testFilterHook" },
+    { "hook": "action:post.create", "method": "testActionHook" }
   ]
 }

@@ -276,6 +276,16 @@ Plugin.filterPostSave = async (data) => {
   return data;
 };
 
+Plugin.testFilterHook = async (data) => {
+  console.log('[FlowPromptBot] filter:post.create:testFilterHook fired');
+  return data;
+};
+
+Plugin.testActionHook = async (data) => {
+  console.log('[FlowPromptBot] action:post.create:testActionHook fired');
+  return data;
+};
+
 // =====================================================
 // HELPERS
 // =====================================================
