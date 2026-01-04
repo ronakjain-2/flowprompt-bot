@@ -247,26 +247,40 @@ Plugin.onPostSave = async ({ post }) => {
 };
 
 Plugin.filterPostCreate = async (data) => {
+  console.log('[FlowPromptBot] filterPostCreate', data);
   const { post } = data;
 
   if (!post?.isMain) return data;
 
   const topic = await topics.getTopicFields(post.tid, ['uid']);
 
+  console.log('[FlowPromptBot] topic in filterPostCreate', topic);
+
   if (!topic || post.uid !== topic.uid) return data;
 
   const match = post.content.match(/(?:flow|flowId)\s*[:=]?\s*([\w-]+)/i);
+
+  console.log('[FlowPromptBot] match in filterPostCreate', match);
 
   if (!match) return data;
 
   const flowId = match[1];
 
+  console.log('[FlowPromptBot] flowId in filterPostCreate', flowId);
+
   // Store flowId once on topic
   await topics.setTopicField(post.tid, 'flowId', flowId);
 
+  console.log('[FlowPromptBot] flowId stored in filterPostCreate', flowId);
+
   // 🔑 MASK / REMOVE BEFORE SAVE (THIS NOW WORKS)
   post.content = post.content.replace(/(?:flow|flowId)\s*[:=]?.*/i, '');
+  console.log('[FlowPromptBot] content in filterPostCreate', post.content);
   post.contentRaw = post.content;
+  console.log(
+    '[FlowPromptBot] contentRaw in filterPostCreate',
+    post.contentRaw,
+  );
 
   console.log(
     '[FlowPromptBot] flowId captured & removed in filter:post.create',
