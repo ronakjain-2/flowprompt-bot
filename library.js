@@ -109,28 +109,29 @@ Plugin.onPostSave = async ({ post }) => {
 
       await topics.setTopicField(post.tid, 'flowId', flowId);
 
-      const postData = await posts.getPostFields(post.pid, ['contentRaw']);
+      setImmediate(async () => {
+        console.log('[FlowPromptBot] flowId set from main post', {
+          tid: post.tid,
+          flowId,
+        });
 
-      if (!postData?.contentRaw) return;
+        const maskedContent = post.content.replace(
+          new RegExp(flowId, 'g'),
+          '********',
+        );
 
-      const maskedRaw = postData.contentRaw.replace(
-        new RegExp(flowId, 'g'),
-        '********',
-      );
+        // Mask flowId in main post
+        await posts.setPostFields(post.pid, {
+          contentRaw: maskedContent,
+          content: maskedContent,
+          edited: Date.now(),
+        });
 
-      // 🔑 UPDATE RAW CONTENT
-      await posts.setPostFields(post.pid, {
-        contentRaw: maskedRaw,
-        edited: Date.now(),
-      });
-
-      // 🔑 FORCE RE-PARSE (CRITICAL)
-      await posts.parsePost(post.pid);
-
-      console.log('[FlowPromptBot] flowId stored & masked in main post', {
-        tid: post.tid,
-        flowId,
-        content: maskedRaw,
+        console.log('[FlowPromptBot] flowId stored & masked in main post', {
+          tid: post.tid,
+          flowId,
+          content: maskedContent,
+        });
       });
       return;
     }
