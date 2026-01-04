@@ -5,8 +5,8 @@
   "version": "1.0.0",
   "library": "library.js",
   "hooks": [
-    { "hook": "action:topic.save", "method": "onTopicCreate" },
-    { "hook": "action:post.save", "method": "onPostSave" },
-    { "hook": "filter:post.save", "method": "filterPostSave" }
+    { "hook": "action:topic.create", "method": "onTopicCreate" },
+    { "hook": "filter:post.save", "method": "filterPostSave" },
+    { "hook": "action:post.save", "method": "onPostSave" }
   ]
 }

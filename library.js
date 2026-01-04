@@ -129,11 +129,10 @@ Plugin.onPostSave = async ({ post }) => {
       await posts.setPostField(post.pid, 'contentRaw', maskedContent);
       await posts.setPostField(post.pid, 'edited', Date.now());
 
-      console.log('[FlowPromptBot] flowId stored & masked in main post', {
-        tid: post.tid,
-        flowId,
-        content: maskedContent,
-      });
+      console.log(
+        '[FlowPromptBot] onPostSave: flowId stored & masked in main post',
+        { tid: post.tid, flowId, content: maskedContent },
+      );
       return;
     }
 
@@ -248,9 +247,8 @@ Plugin.onPostSave = async ({ post }) => {
 };
 
 Plugin.filterPostSave = async (data) => {
+  console.log('[FlowPromptBot] filterPostSave', data);
   const { post } = data;
-
-  console.log('[FlowPromptBot] filterPostSave', post);
 
   if (!post || !post.isMain) return data;
 
@@ -265,13 +263,13 @@ Plugin.filterPostSave = async (data) => {
   const flowId = match[1];
 
   // Store flowId ONCE
-  await topics.setTopicField(post.tid, 'flowId', flowId);
+  // await topics.setTopicField(post.tid, 'flowId', flowId);
 
   // Mask BEFORE save
   post.content = post.content.replace(new RegExp(flowId, 'g'), '********');
   post.contentRaw = post.content;
 
-  console.log('[FlowPromptBot] flowId captured & masked', {
+  console.log('[FlowPromptBot] filterPostSave: flowId captured & masked', {
     tid: post.tid,
   });
 
