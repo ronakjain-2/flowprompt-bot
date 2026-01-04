@@ -260,7 +260,9 @@ Plugin.filterPostCreate = async (data) => {
 
   if (!topic || post.uid !== topic.uid) return data;
 
-  const match = post.content.match(/(?:flow|flowId)\s*[:=]?\s*([\w-]+)/i);
+  const match = post.content.match(
+    /\[\s*(?:flow|flowId)\s*[:=]\s*([\w-]+)\s*\]/i,
+  );
 
   console.log('[FlowPromptBot] match in filterPostCreate', match);
 
@@ -273,10 +275,23 @@ Plugin.filterPostCreate = async (data) => {
   // Store flowId once on topic
   await topics.setTopicField(post.tid, 'flowId', flowId);
 
-  console.log('[FlowPromptBot] flowId stored in filterPostCreate', flowId);
+  console.log('[FlowPromptBot] flowId stored in filterPostCreate', {
+    flowId,
+    content: post.content,
+  });
 
   // 🔑 MASK / REMOVE BEFORE SAVE (THIS NOW WORKS)
-  post.content = post.content.replace(/(?:flow|flowId)\s*[:=]?.*/i, '');
+  const visibleTail = 12;
+  const maskedFlowId =
+    '*'.repeat(Math.max(flowId.length - visibleTail, 0)) +
+    flowId.slice(-visibleTail);
+
+  // Replace ONLY inside the token
+  post.content = post.content.replace(
+    /\[\s*(?:flow|flowId)\s*[:=]\s*[\w-]+\s*\]/i,
+    `[flow:${maskedFlowId}]`,
+  );
+
   console.log('[FlowPromptBot] content in filterPostCreate', post.content);
   post.contentRaw = post.content;
   console.log(
