@@ -120,8 +120,11 @@ Plugin.onPostSave = async ({ post }) => {
       );
 
       // Mask flowId in main post
-      await posts.setPostField(post.pid, 'content', maskedContent);
-      await posts.setPostField(post.pid, 'edited', Date.now());
+      await posts.setPostFields(post.pid, {
+        contentRaw: maskedContent,
+        content: maskedContent,
+        edited: Date.now(),
+      });
 
       console.log('[FlowPromptBot] flowId stored & masked in main post', {
         tid: post.tid,
