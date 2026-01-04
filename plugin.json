@@ -6,6 +6,7 @@
   "library": "library.js",
   "hooks": [
     { "hook": "action:topic.save", "method": "onTopicCreate" },
-    { "hook": "action:post.save", "method": "onPostSave" }
+    { "hook": "action:post.save", "method": "onPostSave" },
+    { "hook": "filter:post.save", "method": "filterPostSave" }
   ]
 }
