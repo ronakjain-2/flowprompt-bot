@@ -39,6 +39,11 @@ Plugin.onTopicCreate = async ({ topic }) => {
   try {
     if (!topic?.title) return;
 
+    console.log('[FlowPromptBot] onTopicCreate', {
+      tid: topic.tid,
+      title: topic.title,
+    });
+
     const match = topic.title.match(/(?:flow|flowId)\s*[:=]?\s*([\w-]+)/i);
 
     if (!match) return;
@@ -109,30 +114,26 @@ Plugin.onPostSave = async ({ post }) => {
 
       await topics.setTopicField(post.tid, 'flowId', flowId);
 
-      // setImmediate(async () => {
-      //   console.log('[FlowPromptBot] flowId set from main post', {
-      //     tid: post.tid,
-      //     flowId,
-      //   });
+      console.log('[FlowPromptBot] flowId set from main post', {
+        tid: post.tid,
+        flowId,
+      });
 
-      //   const maskedContent = post.content.replace(
-      //     new RegExp(flowId, 'g'),
-      //     '********',
-      //   );
+      const maskedContent = post.content.replace(
+        new RegExp(flowId, 'g'),
+        '********',
+      );
 
-      //   // Mask flowId in main post
-      //   await posts.setPostFields(post.pid, {
-      //     contentRaw: maskedContent,
-      //     content: maskedContent,
-      //     edited: Date.now(),
-      //   });
+      // Mask flowId in main post
+      await posts.setPostField(post.pid, 'content', maskedContent);
+      await posts.setPostField(post.pid, 'contentRaw', maskedContent);
+      await posts.setPostField(post.pid, 'edited', Date.now());
 
-      //   console.log('[FlowPromptBot] flowId stored & masked in main post', {
-      //     tid: post.tid,
-      //     flowId,
-      //     content: maskedContent,
-      //   });
-      // });
+      console.log('[FlowPromptBot] flowId stored & masked in main post', {
+        tid: post.tid,
+        flowId,
+        content: maskedContent,
+      });
       return;
     }
 
@@ -246,40 +247,37 @@ Plugin.onPostSave = async ({ post }) => {
   }
 };
 
-Plugin.filterPostSave = async (data) => {
-  const { post } = data;
+// Plugin.filterPostSave = async (data) => {
+//   const { post } = data;
 
-  console.log('[FlowPromptBot] filterPostSave', post);
+//   console.log('[FlowPromptBot] filterPostSave', post);
 
-  if (!post || !post.isMain) return data;
+//   if (!post || !post.isMain) return data;
 
-  // Only topic owner can set flowId
-  const topic = await topics.getTopicFields(post.tid, ['uid']);
+//   const topic = await topics.getTopicFields(post.tid, ['uid']);
 
-  if (!topic || post.uid !== topic.uid) return data;
+//   if (!topic || post.uid !== topic.uid) return data;
 
-  const match = post.content.match(/(?:flow|flowId)\s*[:=]?\s*([\w-]+)/i);
+//   const match = post.content.match(/(?:flow|flowId)\s*[:=]?\s*([\w-]+)/i);
 
-  if (!match) return data;
+//   if (!match) return data;
 
-  const flowId = match[1];
+//   const flowId = match[1];
 
-  // Store flowId as topic metadata
-  // await topics.setTopicField(post.tid, 'flowId', flowId);
+//   // Store flowId ONCE
+//   await topics.setTopicField(post.tid, 'flowId', flowId);
 
-  // 🔑 Mask BEFORE save
-  post.content = post.content.replace(new RegExp(flowId, 'g'), '********');
+//   // Mask BEFORE save
+//   post.content = post.content.replace(new RegExp(flowId, 'g'), '********');
+//   post.contentRaw = post.content;
 
-  // Ensure raw content is also updated
-  post.contentRaw = post.content;
+//   console.log('[FlowPromptBot] flowId captured & masked', {
+//     tid: post.tid,
+//   });
 
-  console.log('[FlowPromptBot] flowId captured & masked (filter)', {
-    tid: post.tid,
-    flowId,
-  });
+//   return data;
+// };
 
-  return data;
-};
 // =====================================================
 // HELPERS
 // =====================================================
