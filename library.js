@@ -246,11 +246,10 @@ Plugin.onPostSave = async ({ post }) => {
   }
 };
 
-Plugin.filterPostSave = async (data) => {
-  console.log('[FlowPromptBot] filterPostSave', data);
+Plugin.filterPostCreate = async (data) => {
   const { post } = data;
 
-  if (!post || !post.isMain) return data;
+  if (!post?.isMain) return data;
 
   const topic = await topics.getTopicFields(post.tid, ['uid']);
 
@@ -262,27 +261,21 @@ Plugin.filterPostSave = async (data) => {
 
   const flowId = match[1];
 
-  // Store flowId ONCE
-  // await topics.setTopicField(post.tid, 'flowId', flowId);
+  // Store flowId once on topic
+  await topics.setTopicField(post.tid, 'flowId', flowId);
 
-  // Mask BEFORE save
-  post.content = post.content.replace(new RegExp(flowId, 'g'), '********');
+  // 🔑 MASK / REMOVE BEFORE SAVE (THIS NOW WORKS)
+  post.content = post.content.replace(/(?:flow|flowId)\s*[:=]?.*/i, '');
   post.contentRaw = post.content;
 
-  console.log('[FlowPromptBot] filterPostSave: flowId captured & masked', {
-    tid: post.tid,
-  });
+  console.log(
+    '[FlowPromptBot] flowId captured & removed in filter:post.create',
+    {
+      tid: post.tid,
+      flowId,
+    },
+  );
 
-  return data;
-};
-
-Plugin.testFilterHook = async (data) => {
-  console.log('[FlowPromptBot] filter:post.create:testFilterHook fired');
-  return data;
-};
-
-Plugin.testActionHook = async (data) => {
-  console.log('[FlowPromptBot] action:post.create:testActionHook fired');
   return data;
 };
 
